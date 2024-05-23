@@ -7,7 +7,7 @@ type DriverConfig struct {
 	VendorName    string
 	VendorVersion string
 	// These are initialized on a per-node unique basis
-	NodeName     string
+	NodeID       string
 	NodeLocation string
 	NodeProject  string
 }
@@ -36,8 +36,8 @@ func (d *DriverConfig) GetVendorVersion() string {
 	return d.VendorVersion
 }
 
-func (d *DriverConfig) GetNodeName() string {
-	return d.NodeName
+func (d *DriverConfig) GetNodeID() string {
+	return d.NodeID
 }
 
 func (d *DriverConfig) GetNodeProject() string {
@@ -49,5 +49,5 @@ func (d *DriverConfig) GetNodeLocation() string {
 }
 
 func (d *DriverConfig) GetNodeIdentifier() string {
-	return fmt.Sprintf("%s-%s", d.GetNodeProject(), d.GetNodeName())
+	return fmt.Sprintf("%s%s%s", d.GetNodeProject(), identifierDelimiter, d.GetNodeID())
 }
