@@ -16,8 +16,6 @@ var NodeServerCapabilities = []csi.NodeServiceCapability_RPC_Type{
 	csi.NodeServiceCapability_RPC_SINGLE_NODE_MULTI_WRITER,
 	csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
 	csi.NodeServiceCapability_RPC_EXPAND_VOLUME,
-	csi.NodeServiceCapability_RPC_GET_VOLUME_STATS,
-	csi.NodeServiceCapability_RPC_VOLUME_MOUNT_GROUP,
 }
 
 type NodeServer struct {

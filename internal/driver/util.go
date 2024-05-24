@@ -425,7 +425,6 @@ func getAttachmentTypeFromVolumeCapability(capability *csi.VolumeCapability) (st
 	accessMode := capability.GetAccessMode().GetMode()
 	switch accessMode {
 	case csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
-
 		csi.VolumeCapability_AccessMode_MULTI_NODE_SINGLE_WRITER,
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_SINGLE_WRITER,
 		csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER,
