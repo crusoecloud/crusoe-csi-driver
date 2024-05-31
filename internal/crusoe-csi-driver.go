@@ -15,14 +15,23 @@ import (
 	"syscall"
 )
 
-const DefaultApiEndpoint = "https://api.crusoecloud.site/v1alpha5"
-const DefaultUnixSocket = "unix:/tmp/csi.sock"
+const apiEndpointFlag = "api-endpoint"
+const apiEndpointDefault = "https://api.crusoecloud.site/v1alpha5"
+const socketAddressFlag = "socket-address"
+const socketAddressDefault = "unix:/tmp/csi.sock"
+const servicesFlag = "services"
+
+// AddFlags attaches the CLI flags the CSI Driver needs to the provided command.
+func AddFlags(cmd *cobra.Command) {
+	cmd.Flags().String(apiEndpointFlag, apiEndpointDefault,
+		"Crusoe API Endpoint")
+	cmd.Flags().String(socketAddressFlag, socketAddressDefault,
+		"Socket which the gRPC server will listen on")
+	cmd.Flags().StringSlice(servicesFlag, []string{},
+		"CSI Driver services to return")
+}
 
 // TODO: flags we need
-// - endpoint
-// - run controller?
-// - run node?
-// - run identity
 type service interface {
 	Init(apiClient *crusoeapi.APIClient, driver *driver.DriverConfig) error
 	RegisterServer(srv *grpc.Server) error
@@ -59,9 +68,21 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 		return err
 	}
 
+	services, err := cmd.Flags().GetStringSlice(servicesFlag)
+	if err != nil {
+		return err
+	}
+	socketAddress, err := cmd.Flags().GetString(socketAddressFlag)
+	if err != nil {
+		return err
+	}
+	apiEndpoint, err := cmd.Flags().GetString(apiEndpointFlag)
+	if err != nil {
+		return err
+	}
+
 	// get endpoint from flags
-	endpoint := DefaultUnixSocket
-	endpointURL, err := url.Parse(endpoint)
+	endpointURL, err := url.Parse(socketAddress)
 	if err != nil {
 		return err
 	}
@@ -76,17 +97,36 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	grpcServers := []service{
 		driver.NewIdentityServer(),
 	}
+	for _, grpcService := range services {
+		switch grpcService {
+		case "identity":
+			grpcServers = append(grpcServers, driver.NewIdentityServer())
+		case "controller":
+			grpcServers = append(grpcServers, driver.NewControllerServer())
+		case "node":
+			grpcServers = append(grpcServers, driver.NewNodeServer())
+		default:
+			return fmt.Errorf("received unknown service type: %s", grpcService)
+		}
 
-	crusoeDriver := &driver.DriverConfig{
-		VendorName:    driver.GetVendorName(),
-		VendorVersion: driver.GetVendorVersion(),
 	}
 
 	// TODO:
 	// - Get version from Docker
-	// - set default API endpoint
-	apiClient := driver.NewAPIClient(DefaultApiEndpoint, accessKey, secretKey,
-		fmt.Sprintf("%s/%s", crusoeDriver.GetName(), crusoeDriver.GetVendorVersion()))
+	apiClient := driver.NewAPIClient(apiEndpoint, accessKey, secretKey,
+		fmt.Sprintf("%s/%s", driver.GetVendorName(), driver.GetVendorVersion()))
+
+	instanceID, projectID, location, err := driver.GetInstanceID(ctx, apiClient)
+	if err != nil {
+		return err
+	}
+	crusoeDriver := &driver.DriverConfig{
+		VendorName:    driver.GetVendorName(),
+		VendorVersion: driver.GetVendorVersion(),
+		NodeID:        instanceID,
+		NodeProject:   projectID,
+		NodeLocation:  location,
+	}
 
 	// Initialize gRPC services and register with the gRPC servers
 	for _, server := range grpcServers {
@@ -107,7 +147,6 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 
 	wg.Wait()
 
-	// TODO: what other clean up needs to be done?
 	srv.GracefulStop()
 
 	return nil

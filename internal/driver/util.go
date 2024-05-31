@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/antihax/optional"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	swagger "github.com/crusoecloud/client-go/swagger/v1alpha4"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -437,4 +439,99 @@ func getAttachmentTypeFromVolumeCapability(capability *csi.VolumeCapability) (st
 	}
 
 	return "", fmt.Errorf("%w: %s", errUnsupportedVolumeAccessMode, accessMode.String())
+}
+
+func getHostFQDN() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+
+	var ip string
+	for _, addr := range addrs {
+		// Filter IPv4 addresses
+		ipNet, ok := addr.(*net.IPNet)
+		if ok && !ipNet.IP.IsGlobalUnicast() {
+			continue
+		}
+		ip = ipNet.IP.String()
+		break
+	}
+
+	if ip == "" {
+		return "", fmt.Errorf("no valid ip addresses")
+	}
+
+	// Perform a reverse DNS lookup on the IP address to get the FQDN
+	fqdn, err := net.LookupHost(ip)
+	if err != nil {
+		return "", err
+	}
+
+	// Print the FQDN
+	return fqdn[0], nil
+}
+
+func GetInstanceID(ctx context.Context, client *crusoeapi.APIClient) (
+	instanceID string,
+	projectID string,
+	location string,
+	err error,
+) {
+	// FQDN is of the form: <vm-name>.<location>.compute.internal
+	fqdn, err := getHostFQDN()
+	if err != nil {
+		return "", "", "", nil
+	}
+
+	fqdnSlice := strings.Split(fqdn, ".")
+	if len(fqdnSlice) < 1 {
+		return "", "", "", fmt.Errorf("bad fqdn")
+	}
+
+	vmName := fqdnSlice[0]
+
+	instance, err := findInstance(ctx, client, vmName)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	return instance.Id, instance.ProjectId, instance.Location, nil
+}
+
+func findInstance(ctx context.Context, client *crusoeapi.APIClient, instanceName string) (*crusoeapi.InstanceV1Alpha5, error) {
+	opts := &crusoeapi.ProjectsApiListProjectsOpts{
+		OrgId: optional.EmptyString(),
+	}
+
+	projectsResp, projectHttpResp, err := client.ProjectsApi.ListProjects(ctx, opts)
+
+	defer projectHttpResp.Body.Close()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query for projects: %w", err)
+	}
+
+	for _, project := range projectsResp.Items {
+		listVMOpts := &crusoeapi.VMsApiListInstancesOpts{
+			Names: optional.NewString(instanceName),
+		}
+		instances, instancesHttpResp, instancesErr := client.VMsApi.ListInstances(ctx, project.Id, listVMOpts)
+		if instancesErr != nil {
+			return nil, instancesErr
+		}
+		instancesHttpResp.Body.Close()
+
+		if len(instances.Items) == 0 {
+			continue
+		}
+
+		for i := range instances.Items {
+			if instances.Items[i].Name == instanceName {
+				return &instances.Items[i], nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("instance not found")
 }
