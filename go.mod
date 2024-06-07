@@ -11,6 +11,8 @@ require (
 	github.com/spf13/cobra v1.8.0
 	google.golang.org/grpc v1.57.0
 	k8s.io/klog/v2 v2.120.1
+	k8s.io/mount-utils v0.30.1
+	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0
 )
 
 require (
@@ -26,6 +28,4 @@ require (
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230803162519-f966b187b2e5 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
-	k8s.io/mount-utils v0.30.1 // indirect
-	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0 // indirect
 )

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
 
 type service interface {
@@ -80,6 +81,7 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 		if listenErr != nil {
 			if strings.Contains(listenErr.Error(), "bind: address already in use") {
 				klog.Infof("Address (%s/%s) already in use, retrying...", endpointURL.Path, endpointURL.Scheme)
+				time.Sleep(1 * time.Second)
 				continue
 			}
 			return listenErr

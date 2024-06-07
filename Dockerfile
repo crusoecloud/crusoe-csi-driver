@@ -2,7 +2,7 @@
 # STEP 1: build crusoe-csi-driver binary #
 ##########################################
 
-FROM golang:1.21 as builder
+FROM golang:1.22 as builder
 
 ARG CI_COMMIT_REF_NAME
 ENV CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME
