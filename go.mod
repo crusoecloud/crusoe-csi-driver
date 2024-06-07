@@ -3,14 +3,16 @@ module github.com/crusoecloud/crusoe-csi-driver
 go 1.21.0
 
 require (
+	github.com/antihax/optional v1.0.0
 	github.com/container-storage-interface/spec v1.9.0
 	github.com/crusoecloud/client-go v0.1.47
 	github.com/spf13/cobra v1.8.0
 	google.golang.org/grpc v1.57.0
+	k8s.io/klog/v2 v2.120.1
 )
 
 require (
-	github.com/antihax/optional v1.0.0 // indirect
+	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect

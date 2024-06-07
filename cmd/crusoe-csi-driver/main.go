@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/crusoecloud/crusoe-csi-driver/internal"
+	"github.com/crusoecloud/crusoe-csi-driver/internal/config"
 	"github.com/spf13/cobra"
 	"os"
 )
@@ -15,7 +16,7 @@ func main() {
 		Args:  cobra.NoArgs,
 		RunE:  internal.RunDriver,
 	}
-	internal.AddFlags(rootCmd)
+	config.AddFlags(rootCmd)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

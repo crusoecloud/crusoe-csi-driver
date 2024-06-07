@@ -9,7 +9,7 @@ const SecretPath = "/etc/secrets"
 const AccessKeyName = "crusoe-csi-accesskey"
 const SecretKeyName = "crusoe-csi-secretkey"
 
-// TODO: Kubernets provides two main ways of injecting secrets into pods:
+// TODO: Kubernetes provides two main ways of injecting secrets into pods:
 // 1) Injecting them into environment variables which can be retrieved by the application
 // 2) Creating a file '/etc/secrets' which the application can then retrieve
 
@@ -33,14 +33,10 @@ func ReadSecretFromFile(secretName string) (string, error) {
 	return secretValue, nil
 }
 
-func ReadSecretFromEnv(secretName string) string {
-	return os.Getenv(secretName)
+func GetCrusoeAccessKey() string {
+	return ReadEnvVar(AccessKeyName)
 }
 
-func GetCrusoeAccessKey() (string, error) {
-	return ReadSecretFromEnv(AccessKeyName), nil
-}
-
-func GetCrusoeSecretKey() (string, error) {
-	return ReadSecretFromEnv(SecretKeyName), nil
+func GetCrusoeSecretKey() string {
+	return ReadEnvVar(SecretKeyName)
 }

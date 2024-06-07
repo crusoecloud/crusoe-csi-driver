@@ -9,8 +9,8 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	swagger "github.com/crusoecloud/client-go/swagger/v1alpha4"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
-	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -441,37 +441,6 @@ func getAttachmentTypeFromVolumeCapability(capability *csi.VolumeCapability) (st
 	return "", fmt.Errorf("%w: %s", errUnsupportedVolumeAccessMode, accessMode.String())
 }
 
-func getHostFQDN() (string, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "", err
-	}
-
-	var ip string
-	for _, addr := range addrs {
-		// Filter IPv4 addresses
-		ipNet, ok := addr.(*net.IPNet)
-		if ok && !ipNet.IP.IsGlobalUnicast() {
-			continue
-		}
-		ip = ipNet.IP.String()
-		break
-	}
-
-	if ip == "" {
-		return "", fmt.Errorf("no valid ip addresses")
-	}
-
-	// Perform a reverse DNS lookup on the IP address to get the FQDN
-	fqdn, err := net.LookupHost(ip)
-	if err != nil {
-		return "", err
-	}
-
-	// Print the FQDN
-	return fqdn[0], nil
-}
-
 func GetInstanceID(ctx context.Context, client *crusoeapi.APIClient) (
 	instanceID string,
 	projectID string,
@@ -479,10 +448,7 @@ func GetInstanceID(ctx context.Context, client *crusoeapi.APIClient) (
 	err error,
 ) {
 	// FQDN is of the form: <vm-name>.<location>.compute.internal
-	fqdn, err := getHostFQDN()
-	if err != nil {
-		return "", "", "", nil
-	}
+	fqdn := GetNodeFQDN()
 
 	fqdnSlice := strings.Split(fqdn, ".")
 	if len(fqdnSlice) < 1 {
@@ -493,7 +459,7 @@ func GetInstanceID(ctx context.Context, client *crusoeapi.APIClient) (
 
 	instance, err := findInstance(ctx, client, vmName)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", fmt.Errorf("could not find instance (%s): %v", vmName, err)
 	}
 
 	return instance.Id, instance.ProjectId, instance.Location, nil
@@ -507,7 +473,6 @@ func findInstance(ctx context.Context, client *crusoeapi.APIClient, instanceName
 	projectsResp, projectHttpResp, err := client.ProjectsApi.ListProjects(ctx, opts)
 
 	defer projectHttpResp.Body.Close()
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to query for projects: %w", err)
 	}
@@ -534,4 +499,12 @@ func findInstance(ctx context.Context, client *crusoeapi.APIClient, instanceName
 	}
 
 	return nil, fmt.Errorf("instance not found")
+}
+
+func ReadEnvVar(secretName string) string {
+	return os.Getenv(secretName)
+}
+
+func GetNodeFQDN() string {
+	return ReadEnvVar("NODE_NAME")
 }

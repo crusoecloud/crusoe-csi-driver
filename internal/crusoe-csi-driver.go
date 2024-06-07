@@ -4,34 +4,20 @@ import (
 	"context"
 	"fmt"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	"github.com/crusoecloud/crusoe-csi-driver/internal/config"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/driver"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	"k8s.io/klog/v2"
 	"net"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 )
 
-const apiEndpointFlag = "api-endpoint"
-const apiEndpointDefault = "https://api.crusoecloud.site/v1alpha5"
-const socketAddressFlag = "socket-address"
-const socketAddressDefault = "unix:/tmp/csi.sock"
-const servicesFlag = "services"
-
-// AddFlags attaches the CLI flags the CSI Driver needs to the provided command.
-func AddFlags(cmd *cobra.Command) {
-	cmd.Flags().String(apiEndpointFlag, apiEndpointDefault,
-		"Crusoe API Endpoint")
-	cmd.Flags().String(socketAddressFlag, socketAddressDefault,
-		"Socket which the gRPC server will listen on")
-	cmd.Flags().StringSlice(servicesFlag, []string{},
-		"CSI Driver services to return")
-}
-
-// TODO: flags we need
 type service interface {
 	Init(apiClient *crusoeapi.APIClient, driver *driver.DriverConfig) error
 	RegisterServer(srv *grpc.Server) error
@@ -59,24 +45,24 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 		}
 	}()
 
-	accessKey, err := driver.GetCrusoeAccessKey()
-	if err != nil {
-		return err
+	accessKey := driver.GetCrusoeAccessKey()
+	if accessKey == "" {
+		return fmt.Errorf("access key is empty")
 	}
-	secretKey, err := driver.GetCrusoeSecretKey()
-	if err != nil {
-		return err
+	secretKey := driver.GetCrusoeSecretKey()
+	if secretKey == "" {
+		return fmt.Errorf("secret key is empty")
 	}
 
-	services, err := cmd.Flags().GetStringSlice(servicesFlag)
+	services, err := cmd.Flags().GetStringSlice(config.ServicesFlag)
 	if err != nil {
 		return err
 	}
-	socketAddress, err := cmd.Flags().GetString(socketAddressFlag)
+	socketAddress, err := cmd.Flags().GetString(config.SocketAddressFlag)
 	if err != nil {
 		return err
 	}
-	apiEndpoint, err := cmd.Flags().GetString(apiEndpointFlag)
+	apiEndpoint, err := cmd.Flags().GetString(config.ApiEndpointFlag)
 	if err != nil {
 		return err
 	}
@@ -87,16 +73,26 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 		return err
 	}
 
-	listener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
-	if listenErr != nil {
-		return listenErr
+	var listener net.Listener
+
+	for {
+		tryListener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
+		if listenErr != nil {
+			if strings.Contains(listenErr.Error(), "bind: address already in use") {
+				klog.Infof("Address (%s/%s) already in use, retrying...", endpointURL.Path, endpointURL.Scheme)
+				continue
+			}
+			return listenErr
+		}
+		listener = tryListener
+		break
 	}
+
+	klog.Infof("Started listener on: %s (scheme: %s)", endpointURL.Path, endpointURL.Scheme)
 
 	srv := grpc.NewServer()
 
-	grpcServers := []service{
-		driver.NewIdentityServer(),
-	}
+	grpcServers := []service{}
 	for _, grpcService := range services {
 		switch grpcService {
 		case "identity":
@@ -108,7 +104,10 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 		default:
 			return fmt.Errorf("received unknown service type: %s", grpcService)
 		}
+	}
 
+	if len(grpcServers) == 0 {
+		return fmt.Errorf("cannot initialize CSI driver with no services")
 	}
 
 	// TODO:
@@ -120,6 +119,7 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	if err != nil {
 		return err
 	}
+
 	crusoeDriver := &driver.DriverConfig{
 		VendorName:    driver.GetVendorName(),
 		VendorVersion: driver.GetVendorVersion(),
