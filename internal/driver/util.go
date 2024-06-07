@@ -331,10 +331,14 @@ func getVolumeFromDisk(disk *crusoeapi.DiskV1Alpha5) (*csi.Volume, error) {
 		},
 	}
 
+	volumeContext := map[string]string{
+		VolumeContextDiskSerialNumberKey: disk.SerialNumber,
+	}
+
 	return &csi.Volume{
 		CapacityBytes:      volBytes,
 		VolumeId:           disk.Id,
-		VolumeContext:      nil,
+		VolumeContext:      volumeContext,
 		ContentSource:      nil,
 		AccessibleTopology: []*csi.Topology{accessibleTopology},
 	}, nil

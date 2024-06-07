@@ -2,25 +2,33 @@ package driver
 
 import (
 	"context"
+	"fmt"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"k8s.io/mount-utils"
+	"k8s.io/utils/exec"
 )
 
 // MaxVolumesPerNode refers  to the maximum number of disks that can be attached to a VM
 // ref: https://docs.crusoecloud.com/storage/disks/overview#persistent-disks
 const MaxVolumesPerNode = 16
-const TopologyLocationKey = "location" // TODO: figure out if this is the right key
+const TopologyLocationKey = "location"  // TODO: figure out if this is the right key
+const TopologyProjectKey = "project-id" // TODO: figure out if this is the right key
+const VolumeContextDiskSerialNumberKey = "serial-number"
+const ReadOnlyMountOption = "ro"
 
 var NodeServerCapabilities = []csi.NodeServiceCapability_RPC_Type{
 	csi.NodeServiceCapability_RPC_SINGLE_NODE_MULTI_WRITER,
-	csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
 	csi.NodeServiceCapability_RPC_EXPAND_VOLUME,
 }
 
 type NodeServer struct {
 	apiClient *crusoeapi.APIClient
 	driver    *DriverConfig
+	mounter   *mount.SafeFormatAndMount
 }
 
 func NewNodeServer() *NodeServer {
@@ -30,6 +38,7 @@ func NewNodeServer() *NodeServer {
 func (n *NodeServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConfig) error {
 	n.driver = driver
 	n.apiClient = apiClient
+	n.mounter = mount.NewSafeFormatAndMount(mount.New(""), exec.New())
 
 	return nil
 }
@@ -49,10 +58,53 @@ func (n *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstage
 }
 
 func (n *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+	targetPath := req.GetTargetPath()
+	stagingTargetPath := req.GetStagingTargetPath()
+	readOnly := req.GetReadonly()
+
+	volumeCapability := req.GetVolumeCapability()
+
+	var sourcePath string
+	// assume we are ext4
+	fsType := "ext4"
+	// options to be passed to the mount syscall (see https://linux.die.net/man/8/mount for more info on options)
+	opts := make([]string, 0)
+	if readOnly {
+		opts = append(opts, ReadOnlyMountOption)
+	}
+
+	// symlink: /dev/disk/by-id/virtio-07EB48176D5521A3EA6
+	if volumeCapability.GetBlock() != nil {
+		volumeContext := req.GetVolumeContext()
+		serialNumber, ok := volumeContext[VolumeContextDiskSerialNumberKey]
+		if !ok {
+			return nil, status.Errorf(codes.FailedPrecondition, fmt.Sprintf("volume missing serial number context key"))
+		}
+		devicePath := fmt.Sprintf("/dev/disk/by-id/virtio-%s", serialNumber)
+		sourcePath = devicePath
+	} else if volumeCapability.GetMount() != nil {
+		sourcePath = stagingTargetPath
+		fsType = volumeCapability.GetMount().GetFsType()
+		opts = append(opts, volumeCapability.GetMount().GetMountFlags()...)
+	}
+
+	err := n.mounter.Mount(sourcePath, targetPath, fsType, opts)
+	if err != nil {
+		// TODO: not every error is bad, sometimes if the volume is already mounted this will return error
+		// however, in those cases we want to return success
+		return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to mount volume at target path: %s", err.Error()))
+	}
+
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
 func (n *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
+	targetPath := req.GetTargetPath()
+	err := mount.CleanupMountPoint(targetPath, n.mounter, false)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to cleanup mount point %s", err.Error()))
+	}
+
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
@@ -88,11 +140,12 @@ func (n *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReques
 	accessibleTopology := &csi.Topology{
 		Segments: map[string]string{
 			TopologyLocationKey: n.driver.GetNodeLocation(),
+			TopologyProjectKey:  n.driver.GetNodeProject(),
 		},
 	}
 
 	return &csi.NodeGetInfoResponse{
-		NodeId:             n.driver.GetNodeIdentifier(), // TODO: get node id from driver
+		NodeId:             n.driver.GetNodeID(),
 		MaxVolumesPerNode:  MaxVolumesPerNode,
 		AccessibleTopology: accessibleTopology,
 	}, nil

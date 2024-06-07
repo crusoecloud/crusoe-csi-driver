@@ -1,7 +1,5 @@
 package driver
 
-import "fmt"
-
 type DriverConfig struct {
 	// These should be consistent regardless of which node the driver is running on.
 	VendorName    string
@@ -46,8 +44,4 @@ func (d *DriverConfig) GetNodeProject() string {
 
 func (d *DriverConfig) GetNodeLocation() string {
 	return d.NodeLocation
-}
-
-func (d *DriverConfig) GetNodeIdentifier() string {
-	return fmt.Sprintf("%s%s%s", d.GetNodeProject(), identifierDelimiter, d.GetNodeID())
 }
