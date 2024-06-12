@@ -14,6 +14,7 @@ spec:
     spec:
       imagePullSecrets:
         - name: registry-credentials
+      serviceAccountName: crusoe-csi-driver-controller-sa
       containers:
         - name: crusoe-csi-driver
           image: "registry.gitlab.com/crusoeenergy/island/external/crusoe-csi-driver:latest"
@@ -42,6 +43,35 @@ spec:
               mountPropagation: "Bidirectional"
           securityContext:
             privileged: true
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v4.4.0
+          args:
+            - "--v=5"
+            - "--csi-address=/csi/csi-controller.sock"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v3.6.0
+          args:
+            - "--v=5"
+            - "--csi-address=/csi/csi-controller.sock"
+            - "--feature-gates=Topology=true"
+            - "--extra-create-metadata"
+            - "--default-fstype=ext4"
+            - "--controller-publish-readonly=true"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-resizer
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.9.0
+          args:
+            - "--v=5"
+            - "--csi-address=/csi/csi-controller.sock"
+            - "--handle-volume-inuse-error=false"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
       volumes:
         # This volume is where the socket for kubelet->driver communication is done
         - name: socket-dir
