@@ -35,7 +35,7 @@ func NewNodeServer() *NodeServer {
 	return &NodeServer{}
 }
 
-func (n *NodeServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConfig) error {
+func (n *NodeServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConfig, _ []Service) error {
 	n.driver = driver
 	n.apiClient = apiClient
 	n.mounter = mount.NewSafeFormatAndMount(mount.New(""), exec.New())

@@ -8,17 +8,46 @@ import (
 )
 
 type IdentityServer struct {
-	apiClient *crusoeapi.APIClient
-	driver    *DriverConfig
+	apiClient    *crusoeapi.APIClient
+	driver       *DriverConfig
+	capabilities []*csi.PluginCapability
 }
 
 func NewIdentityServer() *IdentityServer {
 	return &IdentityServer{}
 }
 
-func (i *IdentityServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConfig) error {
+func (i *IdentityServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConfig, services []Service) error {
 	i.driver = driver
 	i.apiClient = apiClient
+	i.capabilities = []*csi.PluginCapability{
+		{
+			Type: &csi.PluginCapability_VolumeExpansion_{
+				VolumeExpansion: &csi.PluginCapability_VolumeExpansion{
+					Type: csi.PluginCapability_VolumeExpansion_OFFLINE,
+				},
+			},
+		},
+		{
+			Type: &csi.PluginCapability_Service_{
+				Service: &csi.PluginCapability_Service{
+					Type: csi.PluginCapability_Service_VOLUME_ACCESSIBILITY_CONSTRAINTS,
+				},
+			},
+		},
+	}
+	for _, service := range services {
+		if service == ControllerService {
+			i.capabilities = append(i.capabilities, &csi.PluginCapability{
+
+				Type: &csi.PluginCapability_Service_{
+					Service: &csi.PluginCapability_Service{
+						Type: csi.PluginCapability_Service_CONTROLLER_SERVICE,
+					},
+				},
+			})
+		}
+	}
 
 	return nil
 }
@@ -38,22 +67,7 @@ func (i *IdentityServer) GetPluginInfo(ctx context.Context, req *csi.GetPluginIn
 
 func (i *IdentityServer) GetPluginCapabilities(ctx context.Context, req *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
 	return &csi.GetPluginCapabilitiesResponse{
-		Capabilities: []*csi.PluginCapability{
-			{
-				Type: &csi.PluginCapability_VolumeExpansion_{
-					VolumeExpansion: &csi.PluginCapability_VolumeExpansion{
-						Type: csi.PluginCapability_VolumeExpansion_OFFLINE,
-					},
-				},
-			},
-			{
-				Type: &csi.PluginCapability_Service_{
-					Service: &csi.PluginCapability_Service{
-						Type: csi.PluginCapability_Service_VOLUME_ACCESSIBILITY_CONSTRAINTS,
-					},
-				},
-			},
-		},
+		Capabilities: i.capabilities,
 	}, nil
 }
 

@@ -10,6 +10,14 @@ type DriverConfig struct {
 	NodeProject  string
 }
 
+type Service int
+
+const (
+	NodeService Service = iota
+	IdentityService
+	ControllerService
+)
+
 // Note: these are injected during build
 // This name MUST correspond with the name provided to the storage class
 // This is how Kubernetes knows to invoke our CSI.

@@ -20,7 +20,7 @@ import (
 )
 
 type service interface {
-	Init(apiClient *crusoeapi.APIClient, driver *driver.DriverConfig) error
+	Init(apiClient *crusoeapi.APIClient, driver *driver.DriverConfig, services []driver.Service) error
 	RegisterServer(srv *grpc.Server) error
 }
 
@@ -59,6 +59,19 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	services, err := cmd.Flags().GetStringSlice(config.ServicesFlag)
 	if err != nil {
 		return err
+	}
+	requestedServices := []driver.Service{}
+	for _, reqService := range services {
+		switch reqService {
+		case "identity":
+			requestedServices = append(requestedServices, driver.IdentityService)
+		case "controller":
+			requestedServices = append(requestedServices, driver.ControllerService)
+		case "node":
+			requestedServices = append(requestedServices, driver.NodeService)
+		default:
+			return fmt.Errorf("received unknown service type: %s", reqService)
+		}
 	}
 	socketAddress, err := cmd.Flags().GetString(config.SocketAddressFlag)
 	if err != nil {
@@ -103,16 +116,14 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	srv := grpc.NewServer()
 
 	grpcServers := []service{}
-	for _, grpcService := range services {
-		switch grpcService {
-		case "identity":
-			grpcServers = append(grpcServers, driver.NewIdentityServer())
-		case "controller":
+	for _, grpcSrvc := range requestedServices {
+		switch grpcSrvc {
+		case driver.ControllerService:
 			grpcServers = append(grpcServers, driver.NewControllerServer())
-		case "node":
+		case driver.NodeService:
 			grpcServers = append(grpcServers, driver.NewNodeServer())
-		default:
-			return fmt.Errorf("received unknown service type: %s", grpcService)
+		case driver.IdentityService:
+			grpcServers = append(grpcServers, driver.NewIdentityServer())
 		}
 	}
 
@@ -138,7 +149,7 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 
 	// Initialize gRPC services and register with the gRPC servers
 	for _, server := range grpcServers {
-		err := server.Init(apiClient, crusoeDriver)
+		err := server.Init(apiClient, crusoeDriver, requestedServices)
 		if err != nil {
 			return err
 		}

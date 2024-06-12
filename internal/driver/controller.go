@@ -29,7 +29,7 @@ func NewControllerServer() *ControllerServer {
 	return &ControllerServer{}
 }
 
-func (c *ControllerServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConfig) error {
+func (c *ControllerServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConfig, _ []Service) error {
 	c.driver = driver
 	c.apiClient = apiClient
 
