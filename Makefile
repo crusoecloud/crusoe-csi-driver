@@ -12,7 +12,7 @@ GO_ACC_VERSION = latest
 GOTESTSUM_VERSION = latest
 GOCOVER_VERSION = latest
 
-GO_LDFLAGS=-ldflags "-X 'github.com/crusoecloud/crusoe-csi-driver/internal/driver/driver.version=$$CI_COMMIT_REF_NAME' -X 'github.com/crusoecloud/crusoe-csi-driver/internal/driver/driver.name=$$CI_PROJECT_NAME'"
+GO_LDFLAGS=-ldflags "-X 'github.com/crusoecloud/crusoe-csi-driver/internal/driver.version=$$CI_COMMIT_REF_NAME' -X 'github.com/crusoecloud/crusoe-csi-driver/internal/driver.name=$$CI_PROJECT_NAME'"
 
 .PHONY: run
 run:

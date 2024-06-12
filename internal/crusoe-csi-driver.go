@@ -26,6 +26,7 @@ type service interface {
 
 // RunDriver starts up and runs the Crusoe Cloud CSI Driver.
 func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
+
 	// Listen for interrupt signals.
 	interrupt := make(chan os.Signal, 1)
 	// Ctrl-C
@@ -76,12 +77,19 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 
 	var listener net.Listener
 
+	tryCount := 0
 	for {
 		tryListener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
 		if listenErr != nil {
+			// if old pods are being terminated, they might not have closed the gRPC server listening on the socket
+			// let's wait and try again
 			if strings.Contains(listenErr.Error(), "bind: address already in use") {
-				klog.Infof("Address (%s/%s) already in use, retrying...", endpointURL.Path, endpointURL.Scheme)
-				time.Sleep(1 * time.Second)
+				klog.Infof("Address (%s//%s) already in use, retrying...", endpointURL.Scheme, endpointURL.Path)
+				time.Sleep(5 * time.Second)
+				if tryCount == 10 {
+					return listenErr
+				}
+				tryCount++
 				continue
 			}
 			return listenErr
@@ -112,8 +120,6 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 		return fmt.Errorf("cannot initialize CSI driver with no services")
 	}
 
-	// TODO:
-	// - Get version from Docker
 	apiClient := driver.NewAPIClient(apiEndpoint, accessKey, secretKey,
 		fmt.Sprintf("%s/%s", driver.GetVendorName(), driver.GetVendorVersion()))
 
