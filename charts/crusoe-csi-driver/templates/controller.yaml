@@ -39,7 +39,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
             - name: mountpoint-dir
-              mountPath: /var/lib/kubelet/pods
+              mountPath: /var/lib/kubelet
               mountPropagation: "Bidirectional"
           securityContext:
             privileged: true
@@ -81,5 +81,5 @@ spec:
           # This volume is where the driver mounts volumes
         - name: mountpoint-dir
           hostPath:
-            path: /var/lib/kubelet/pods
+            path: /var/lib/kubelet
             type: Directory

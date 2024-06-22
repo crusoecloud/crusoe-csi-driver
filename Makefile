@@ -53,13 +53,13 @@ test-ci: ## Runs the go tests with additional options for a CI environment
 	@gocover-cobertura < coverage.out > coverage.xml
 
 .PHONY: lint
-lint: get-aliaslint ## Verifies `golangci-lint` passes
+lint: ## Verifies `golangci-lint` passes
 	@echo "==> $@"
 	@golangci-lint version
 	@golangci-lint run ./...
 
 .PHONY: lint-ci
-lint-ci: get-aliaslint ## Verifies `golangci-lint` passes and outputs in CI-friendly format
+lint-ci: ## Verifies `golangci-lint` passes and outputs in CI-friendly format
 	@echo "==> $@"
 	@golangci-lint version
 	@golangci-lint run ./... --out-format code-climate > golangci-lint.json

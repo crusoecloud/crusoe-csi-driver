@@ -1,10 +1,13 @@
-# CSI provisioner
+# This file contains the objects representing the Service
+# Accounts and RBAC tied to that account that need to be
+# made for the CSI controller deployment. This is so the
+# CSI controller sidecars have permissions to watch the
+# K8s API to see if PVCs are created.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: crusoe-csi-driver-controller-sa
-  # replace with non-default namespace name
-  namespace: default
+namespace: {{ .Release.Namespace }}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
@@ -35,10 +38,6 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get", "list", "watch"]
-  # Access to volumeattachments is only needed when the CSI driver
-  # has the PUBLISH_UNPUBLISH_VOLUME controller capability.
-  # In that case, external-provisioner will watch volumeattachments
-  # to determine when it is safe to delete a volume.
   - apiGroups: ["storage.k8s.io"]
     resources: ["volumeattachments"]
     verbs: ["get", "list", "watch"]
@@ -50,56 +49,21 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: crusoe-csi-driver-controller-sa
-    # replace with non-default namespace name
-    namespace: default
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
   name: external-provisioner-runner
   apiGroup: rbac.authorization.k8s.io
-
----
-# Provisioner must be able to work with endpoints in current namespace
-# if (and only if) leadership election is enabled
-kind: Role
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  # replace with non-default namespace name
-  namespace: default
-  name: external-provisioner-cfg
-rules:
-  # Only one of the following rules for endpoints or leases is required based on
-  # what is set for `--leader-election-type`. Endpoints are deprecated in favor of Leases.
-  - apiGroups: ["coordination.k8s.io"]
-    resources: ["leases"]
-    verbs: ["get", "watch", "list", "delete", "update", "create"]
-  # Permissions for CSIStorageCapacity are only needed enabling the publishing
-  # of storage capacity information.
-  - apiGroups: ["storage.k8s.io"]
-    resources: ["csistoragecapacities"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # The GET permissions below are needed for walking up the ownership chain
-  # for CSIStorageCapacity. They are sufficient for deployment via
-  # StatefulSet (only needs to get Pod) and Deployment (needs to get
-  # Pod and then ReplicaSet to find the Deployment).
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get"]
-  - apiGroups: ["apps"]
-    resources: ["replicasets"]
-    verbs: ["get"]
-
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: csi-provisioner-role-cfg
-  # replace with non-default namespace name
-  namespace: default
+namespace: {{ .Release.Namespace }}
 subjects:
   - kind: ServiceAccount
     name: crusoe-csi-driver-controller-sa
-    # replace with non-default namespace name
-    namespace: default
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
   name: external-provisioner-cfg
@@ -123,14 +87,6 @@ rules:
   - apiGroups: ["storage.k8s.io"]
     resources: ["volumeattachments/status"]
     verbs: ["patch"]
-#Secret permission is optional.
-#Enable it if you need value from secret.
-#For example, you have key `csi.storage.k8s.io/controller-publish-secret-name` in StorageClass.parameters
-#see https://kubernetes-csi.github.io/docs/secrets-and-credentials.html
-#  - apiGroups: [""]
-#    resources: ["secrets"]
-#    verbs: ["get", "list"]
-
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -139,39 +95,21 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: crusoe-csi-driver-controller-sa
-    # replace with non-default namespace name
-    namespace: default
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
   name: external-attacher-runner
   apiGroup: rbac.authorization.k8s.io
-
----
-# Attacher must be able to work with configmaps or leases in the current namespace
-# if (and only if) leadership election is enabled
-kind: Role
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  # replace with non-default namespace name
-  namespace: default
-  name: external-attacher-cfg
-rules:
-  - apiGroups: ["coordination.k8s.io"]
-    resources: ["leases"]
-    verbs: ["get", "watch", "list", "delete", "update", "create"]
-
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: csi-attacher-role-cfg
-  # replace with non-default namespace name
-  namespace: default
+namespace: {{ .Release.Namespace }}
 subjects:
   - kind: ServiceAccount
     name: crusoe-csi-driver-controller-sa
-    # replace with non-default namespace name
-    namespace: default
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
   name: external-attacher-cfg
@@ -198,10 +136,6 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["list", "watch", "create", "update", "patch"]
-#  # only required if enabling the alpha volume modify feature
-#  - apiGroups: ["storage.k8s.io"]
-#    resources: ["volumeattributesclasses"]
-#    verbs: ["get", "list", "watch"]
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -210,39 +144,21 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: crusoe-csi-driver-controller-sa
-    # replace with non-default namespace name
-    namespace: default
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
   name: external-resizer-runner
   apiGroup: rbac.authorization.k8s.io
-
----
-# Resizer must be able to work with `leases` in current namespace
-# if (and only if) leadership election is enabled
-kind: Role
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  # replace with non-default namespace name
-  namespace: default
-  name: external-resizer-cfg
-rules:
-  - apiGroups: ["coordination.k8s.io"]
-    resources: ["leases"]
-    verbs: ["get", "watch", "list", "delete", "update", "create"]
-
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: csi-resizer-role-cfg
-  # replace with non-default namespace name
-  namespace: default
+  namespace: {{ .Release.Namespace }}
 subjects:
   - kind: ServiceAccount
     name: crusoe-csi-driver-controller-sa
-    # replace with non-default namespace name
-    namespace: default
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
   name: external-resizer-cfg
