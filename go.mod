@@ -2,8 +2,6 @@ module github.com/crusoecloud/crusoe-csi-driver
 
 go 1.22.0
 
-toolchain go1.22.4
-
 require (
 	github.com/antihax/optional v1.0.0
 	github.com/container-storage-interface/spec v1.9.0
