@@ -19,6 +19,11 @@ RUN make cross
 ################################################################
 FROM alpine
 
+RUN apk update && \
+    apk add --no-cache e2fsprogs && \
+    apk add --no-cache blkid && \
+    rm -rf /var/cache/apk/*
+
 COPY --from=builder /build/dist/crusoe-csi-driver /usr/local/go/bin/crusoe-csi-driver
 
 ENTRYPOINT ["/usr/local/go/bin/crusoe-csi-driver"]
