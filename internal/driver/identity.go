@@ -11,7 +11,7 @@ import (
 
 type IdentityServer struct {
 	apiClient    *crusoeapi.APIClient
-	driver       *DriverConfig
+	driver       *Config
 	capabilities []*csi.PluginCapability
 }
 
@@ -19,7 +19,7 @@ func NewIdentityServer() *IdentityServer {
 	return &IdentityServer{}
 }
 
-func (i *IdentityServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConfig, services []Service) error {
+func (i *IdentityServer) Init(apiClient *crusoeapi.APIClient, driver *Config, services []Service) error {
 	i.driver = driver
 	i.apiClient = apiClient
 	i.capabilities = []*csi.PluginCapability{
@@ -59,19 +59,23 @@ func (i *IdentityServer) RegisterServer(srv *grpc.Server) error {
 	return nil
 }
 
-func (i *IdentityServer) GetPluginInfo(ctx context.Context, req *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
+func (i *IdentityServer) GetPluginInfo(_ context.Context,
+	_ *csi.GetPluginInfoRequest,
+) (*csi.GetPluginInfoResponse, error) {
 	return &csi.GetPluginInfoResponse{
 		Name:          i.driver.GetName(),
 		VendorVersion: i.driver.GetVendorVersion(),
 	}, nil
 }
 
-func (i *IdentityServer) GetPluginCapabilities(ctx context.Context, req *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
+func (i *IdentityServer) GetPluginCapabilities(_ context.Context,
+	_ *csi.GetPluginCapabilitiesRequest,
+) (*csi.GetPluginCapabilitiesResponse, error) {
 	return &csi.GetPluginCapabilitiesResponse{
 		Capabilities: i.capabilities,
 	}, nil
 }
 
-func (i *IdentityServer) Probe(ctx context.Context, req *csi.ProbeRequest) (*csi.ProbeResponse, error) {
+func (i *IdentityServer) Probe(_ context.Context, _ *csi.ProbeRequest) (*csi.ProbeResponse, error) {
 	return &csi.ProbeResponse{}, nil
 }

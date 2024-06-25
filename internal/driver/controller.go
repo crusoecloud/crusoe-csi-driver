@@ -13,7 +13,8 @@ import (
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 )
 
-var ControllerServerCapabilities = []csi.ControllerServiceCapability_RPC_Type{
+//nolint:gochecknoglobals // we will use this slice to determine what the controller service supports
+var controllerServerCapabilities = []csi.ControllerServiceCapability_RPC_Type{
 	csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 	csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 	csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
@@ -25,14 +26,14 @@ var errRPCUnimplemented = errors.New("this RPC is currently not implemented")
 
 type ControllerServer struct {
 	apiClient *crusoeapi.APIClient
-	driver    *DriverConfig
+	driver    *Config
 }
 
 func NewControllerServer() *ControllerServer {
 	return &ControllerServer{}
 }
 
-func (c *ControllerServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConfig, _ []Service) error {
+func (c *ControllerServer) Init(apiClient *crusoeapi.APIClient, driver *Config, _ []Service) error {
 	c.driver = driver
 	c.apiClient = apiClient
 
@@ -45,7 +46,9 @@ func (c *ControllerServer) RegisterServer(srv *grpc.Server) error {
 	return nil
 }
 
-func (c *ControllerServer) CreateVolume(ctx context.Context, request *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
+func (c *ControllerServer) CreateVolume(ctx context.Context,
+	request *csi.CreateVolumeRequest,
+) (*csi.CreateVolumeResponse, error) {
 	klog.Infof("Received request to create volume: %+v", request)
 
 	capabilities := request.GetVolumeCapabilities()
@@ -58,14 +61,16 @@ func (c *ControllerServer) CreateVolume(ctx context.Context, request *csi.Create
 
 	foundDisk, findErr := findDisk(ctx, c.apiClient, c.driver.GetNodeProject(), request.GetName())
 	if findErr != nil {
-		return nil, status.Errorf(codes.FailedPrecondition, "failed to validate disk if disk already exists: %s", findErr.Error())
+		return nil, status.Errorf(codes.FailedPrecondition,
+			"failed to validate disk if disk already exists: %s", findErr.Error())
 	}
 	var disk *crusoeapi.DiskV1Alpha5
 	// If disk already exists, make sure that it lines up with what we want
 	if foundDisk != nil {
 		verifyErr := verifyExistingDisk(foundDisk, createReq)
 		if verifyErr != nil {
-			return nil, status.Errorf(codes.AlreadyExists, "failed to validate disk if disk already exists: %s", verifyErr.Error())
+			return nil, status.Errorf(codes.AlreadyExists,
+				"failed to validate disk if disk already exists: %s", verifyErr.Error())
 		}
 		disk = foundDisk
 	} else {
@@ -79,7 +84,8 @@ func (c *ControllerServer) CreateVolume(ctx context.Context, request *csi.Create
 
 	volume, parseErr := getVolumeFromDisk(disk)
 	if parseErr != nil {
-		return nil, status.Errorf(codes.Internal, "failed to convert crusoe disk to csi volume: %s", parseErr.Error())
+		return nil, status.Errorf(codes.Internal,
+			"failed to convert crusoe disk to csi volume: %s", parseErr.Error())
 	}
 
 	klog.Infof("Successfully created volume with name: %s", request.GetName())
@@ -89,7 +95,9 @@ func (c *ControllerServer) CreateVolume(ctx context.Context, request *csi.Create
 	}, nil
 }
 
-func (c *ControllerServer) ControllerExpandVolume(ctx context.Context, request *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
+func (c *ControllerServer) ControllerExpandVolume(ctx context.Context,
+	request *csi.ControllerExpandVolumeRequest,
+) (*csi.ControllerExpandVolumeResponse, error) {
 	klog.Infof("Received request to expand volume: %+v", request)
 	capacityRange := request.GetCapacityRange()
 
@@ -118,7 +126,9 @@ func (c *ControllerServer) ControllerExpandVolume(ctx context.Context, request *
 	}, nil
 }
 
-func (c *ControllerServer) DeleteVolume(ctx context.Context, request *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
+func (c *ControllerServer) DeleteVolume(ctx context.Context,
+	request *csi.DeleteVolumeRequest,
+) (*csi.DeleteVolumeResponse, error) {
 	err := deleteDisk(ctx, c.apiClient, c.driver.GetNodeProject(), request.GetVolumeId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to delete disk: %s", err.Error())
@@ -127,7 +137,9 @@ func (c *ControllerServer) DeleteVolume(ctx context.Context, request *csi.Delete
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
-func (c *ControllerServer) ControllerPublishVolume(ctx context.Context, request *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
+func (c *ControllerServer) ControllerPublishVolume(ctx context.Context,
+	request *csi.ControllerPublishVolumeRequest,
+) (*csi.ControllerPublishVolumeResponse, error) {
 	klog.Infof("Received request to publish volume: %+v", request)
 	diskID := request.GetVolumeId()
 	instanceID := getInstanceIDFromNodeID(request.GetNodeId())
@@ -150,14 +162,17 @@ func (c *ControllerServer) ControllerPublishVolume(ctx context.Context, request 
 		return nil, status.Errorf(codes.Internal, "failed to attach disk to vm: %s", attachErr.Error())
 	}
 
-	klog.Infof("Successfully published volume with ID: %s to node: %s", request.GetVolumeId(), request.GetNodeId())
+	klog.Infof("Successfully published volume with ID: %s to node: %s",
+		request.GetVolumeId(), request.GetNodeId())
 
 	return &csi.ControllerPublishVolumeResponse{
 		PublishContext: nil,
 	}, nil
 }
 
-func (c *ControllerServer) ControllerUnpublishVolume(ctx context.Context, request *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
+func (c *ControllerServer) ControllerUnpublishVolume(ctx context.Context,
+	request *csi.ControllerUnpublishVolumeRequest,
+) (*csi.ControllerUnpublishVolumeResponse, error) {
 	klog.Infof("Received request to unpublish volume: %+v", request)
 	diskID := request.GetVolumeId()
 	instanceID := getInstanceIDFromNodeID(request.GetNodeId())
@@ -174,7 +189,9 @@ func (c *ControllerServer) ControllerUnpublishVolume(ctx context.Context, reques
 	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
 
-func (c *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, request *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
+func (c *ControllerServer) ValidateVolumeCapabilities(ctx context.Context,
+	request *csi.ValidateVolumeCapabilitiesRequest,
+) (*csi.ValidateVolumeCapabilitiesResponse, error) {
 	klog.Infof("Received request to validate volume capabilities: %+v", request)
 	capabilities := request.GetVolumeCapabilities()
 	if capErr := validateVolumeCapabilities(capabilities); capErr != nil {
@@ -202,38 +219,54 @@ func (c *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, reque
 	}, nil
 }
 
-func (c *ControllerServer) ListVolumes(ctx context.Context, request *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
+func (c *ControllerServer) ListVolumes(_ context.Context,
+	_ *csi.ListVolumesRequest,
+) (*csi.ListVolumesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
-func (c *ControllerServer) ControllerGetVolume(ctx context.Context, request *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
+func (c *ControllerServer) ControllerGetVolume(_ context.Context,
+	_ *csi.ControllerGetVolumeRequest,
+) (*csi.ControllerGetVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
-func (c *ControllerServer) GetCapacity(ctx context.Context, request *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
+func (c *ControllerServer) GetCapacity(_ context.Context,
+	_ *csi.GetCapacityRequest,
+) (*csi.GetCapacityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
-func (c *ControllerServer) CreateSnapshot(ctx context.Context, request *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
+func (c *ControllerServer) CreateSnapshot(_ context.Context,
+	_ *csi.CreateSnapshotRequest,
+) (*csi.CreateSnapshotResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
-func (c *ControllerServer) DeleteSnapshot(ctx context.Context, request *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
+func (c *ControllerServer) DeleteSnapshot(_ context.Context,
+	_ *csi.DeleteSnapshotRequest,
+) (*csi.DeleteSnapshotResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
-func (c *ControllerServer) ListSnapshots(ctx context.Context, request *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {
+func (c *ControllerServer) ListSnapshots(_ context.Context,
+	_ *csi.ListSnapshotsRequest,
+) (*csi.ListSnapshotsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
-func (c *ControllerServer) ControllerModifyVolume(ctx context.Context, request *csi.ControllerModifyVolumeRequest) (*csi.ControllerModifyVolumeResponse, error) {
+func (c *ControllerServer) ControllerModifyVolume(_ context.Context,
+	_ *csi.ControllerModifyVolumeRequest,
+) (*csi.ControllerModifyVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
-func (c *ControllerServer) ControllerGetCapabilities(ctx context.Context, req *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
-	controllerCapabilities := make([]*csi.ControllerServiceCapability, 0, len(ControllerServerCapabilities))
+func (c *ControllerServer) ControllerGetCapabilities(_ context.Context,
+	_ *csi.ControllerGetCapabilitiesRequest,
+) (*csi.ControllerGetCapabilitiesResponse, error) {
+	controllerCapabilities := make([]*csi.ControllerServiceCapability, 0, len(controllerServerCapabilities))
 
-	for _, capability := range ControllerServerCapabilities {
+	for _, capability := range controllerServerCapabilities {
 		controllerCapabilities = append(controllerCapabilities, &csi.ControllerServiceCapability{
 			Type: &csi.ControllerServiceCapability_Rpc{
 				Rpc: &csi.ControllerServiceCapability_RPC{

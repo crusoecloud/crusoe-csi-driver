@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -29,12 +30,20 @@ const (
 	nodeArg              = "node"
 )
 
+var (
+	errAccessKeyEmpty     = errors.New("access key is empty")
+	errSecretKeyEmpty     = errors.New("secret key is empty")
+	errNoServicesProvided = errors.New("cannot initialize CSI driver with no services")
+)
+
 type service interface {
-	Init(apiClient *crusoeapi.APIClient, driver *driver.DriverConfig, services []driver.Service) error
+	Init(apiClient *crusoeapi.APIClient, driver *driver.Config, services []driver.Service) error
 	RegisterServer(srv *grpc.Server) error
 }
 
 // RunDriver starts up and runs the Crusoe Cloud CSI Driver.
+//
+//nolint:funlen,cyclop // a lot statements here because all set up is done here, already factored
 func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	// Listen for interrupt signals.
 	interrupt := make(chan os.Signal, 1)
@@ -56,72 +65,20 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 		}
 	}()
 
-	accessKey := driver.GetCrusoeAccessKey()
-	if accessKey == "" {
-		return fmt.Errorf("access key is empty")
-	}
-	secretKey := driver.GetCrusoeSecretKey()
-	if secretKey == "" {
-		return fmt.Errorf("secret key is empty")
-	}
-
-	services, err := cmd.Flags().GetStringSlice(config.ServicesFlag)
-	if err != nil {
-		return err
-	}
-	requestedServices := []driver.Service{}
-	for _, reqService := range services {
-		switch reqService {
-		case identityArg:
-			requestedServices = append(requestedServices, driver.IdentityService)
-		case controllerArg:
-			requestedServices = append(requestedServices, driver.ControllerService)
-		case nodeArg:
-			requestedServices = append(requestedServices, driver.NodeService)
-		default:
-			return fmt.Errorf("received unknown service type: %s", reqService)
-		}
-	}
-	socketAddress, err := cmd.Flags().GetString(config.SocketAddressFlag)
-	if err != nil {
-		return err
-	}
-	apiEndpoint, err := cmd.Flags().GetString(config.ApiEndpointFlag)
-	if err != nil {
-		return err
+	requestedServices, accessKey, secretKey, socketAddress, apiEndpoint, parseErr := parseAndValidateArguments(cmd)
+	if parseErr != nil {
+		return fmt.Errorf("failed to parse arguments: %w", parseErr)
 	}
 
 	// get endpoint from flags
 	endpointURL, err := url.Parse(socketAddress)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse socket address (%s): %w", endpointURL, err)
 	}
 
-	var listener net.Listener
-
-	tryCount := 0
-	for {
-		tryListener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
-		if listenErr != nil {
-			// if old pods are being terminated, they might not have closed the gRPC server listening on the socket
-			// let's wait and try again
-			if strings.Contains(listenErr.Error(), "bind: address already in use") {
-				klog.Infof("Address (%s//%s) already in use, retrying...", endpointURL.Scheme, endpointURL.Path)
-				time.Sleep(retryIntervalSeconds * time.Second)
-
-				if tryCount == maxRetries {
-					return listenErr
-				}
-				tryCount++
-
-				continue
-			}
-
-			return listenErr
-		}
-		listener = tryListener
-
-		break
+	listener, listenErr := startListener(endpointURL)
+	if listenErr != nil {
+		return fmt.Errorf("failed to start listener on provided socket url: %w", listenErr)
 	}
 
 	klog.Infof("Started listener on: %s (scheme: %s)", endpointURL.Path, endpointURL.Scheme)
@@ -141,7 +98,7 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	}
 
 	if len(grpcServers) == 0 {
-		return fmt.Errorf("cannot initialize CSI driver with no services")
+		return errNoServicesProvided
 	}
 
 	apiClient := driver.NewAPIClient(apiEndpoint, accessKey, secretKey,
@@ -149,10 +106,10 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 
 	instanceID, projectID, location, err := driver.GetInstanceID(ctx, apiClient)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get instance id of nodeL %w", err)
 	}
 
-	crusoeDriver := &driver.DriverConfig{
+	crusoeDriver := &driver.Config{
 		VendorName:    driver.GetVendorName(),
 		VendorVersion: driver.GetVendorVersion(),
 		NodeID:        instanceID,
@@ -164,12 +121,12 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	for _, server := range grpcServers {
 		initErr := server.Init(apiClient, crusoeDriver, requestedServices)
 		if initErr != nil {
-			return initErr
+			return fmt.Errorf("failed to initialize server: %w", initErr)
 		}
 
 		registerErr := server.RegisterServer(srv)
 		if registerErr != nil {
-			return registerErr
+			return fmt.Errorf("failed to register server: %w", registerErr)
 		}
 	}
 
@@ -182,4 +139,79 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	srv.GracefulStop()
 
 	return nil
+}
+
+//nolint:gocritic,cyclop // there are a lot of returned variables here because we parse all args here
+func parseAndValidateArguments(cmd *cobra.Command) (
+	requestedServices []driver.Service,
+	accessKey, secretKey, socketAddress, apiEndpoint string,
+	err error,
+) {
+	accessKey = driver.GetCrusoeAccessKey()
+	if accessKey == "" {
+		return nil, "", "", "", "", errAccessKeyEmpty
+	}
+	secretKey = driver.GetCrusoeSecretKey()
+	if secretKey == "" {
+		return nil, "", "", "", "", errSecretKeyEmpty
+	}
+
+	services, err := cmd.Flags().GetStringSlice(config.ServicesFlag)
+	if err != nil {
+		return nil, "", "", "", "",
+			fmt.Errorf("failed to get services flag: %w", err)
+	}
+	requestedServices = []driver.Service{}
+	for _, reqService := range services {
+		switch reqService {
+		case identityArg:
+			requestedServices = append(requestedServices, driver.IdentityService)
+		case controllerArg:
+			requestedServices = append(requestedServices, driver.ControllerService)
+		case nodeArg:
+			requestedServices = append(requestedServices, driver.NodeService)
+		default:
+			//nolint:goerr113 // use dynamic errors for more informative error handling
+			return nil, "", "", "", "",
+				fmt.Errorf("received unknown service type: %s", reqService)
+		}
+	}
+	socketAddress, err = cmd.Flags().GetString(config.SocketAddressFlag)
+	if err != nil {
+		return nil, "", "", "", "",
+			fmt.Errorf("failed to get socket address flag: %w", err)
+	}
+	apiEndpoint, err = cmd.Flags().GetString(config.APIEndpointFlag)
+	if err != nil {
+		return nil, "", "", "", "",
+			fmt.Errorf("failed to get api endpoint flag: %w", err)
+	}
+
+	return requestedServices, accessKey, secretKey, socketAddress, apiEndpoint, nil
+}
+
+func startListener(endpointURL *url.URL) (net.Listener, error) {
+	tryCount := 0
+	var listener net.Listener
+	for {
+		tryListener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
+		if listenErr != nil {
+			// if old pods are being terminated, they might not have closed the gRPC server listening on the socket
+			// let's wait and try again
+			if strings.Contains(listenErr.Error(), "bind: address already in use") && tryCount < maxRetries {
+				klog.Infof("Address (%s//%s) already in use, retrying...", endpointURL.Scheme, endpointURL.Path)
+				time.Sleep(retryIntervalSeconds * time.Second)
+				tryCount++
+
+				continue
+			}
+
+			return nil, fmt.Errorf("failed to listen on provided socket: %w", listenErr)
+		}
+		listener = tryListener
+
+		break
+	}
+
+	return listener, nil
 }

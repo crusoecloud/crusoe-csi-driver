@@ -3,8 +3,8 @@ package config
 import "github.com/spf13/cobra"
 
 const (
-	ApiEndpointFlag      = "api-endpoint"
-	ApiEndpointDefault   = "https://api.crusoecloud.com/v1alpha5"
+	APIEndpointFlag      = "api-endpoint"
+	APIEndpointDefault   = "https://api.crusoecloud.com/v1alpha5"
 	SocketAddressFlag    = "socket-address"
 	SocketAddressDefault = "unix:/tmp/csi.sock"
 	ServicesFlag         = "services"
@@ -12,7 +12,7 @@ const (
 
 // AddFlags attaches the CLI flags the CSI Driver needs to the provided command.
 func AddFlags(cmd *cobra.Command) {
-	cmd.Flags().String(ApiEndpointFlag, ApiEndpointDefault,
+	cmd.Flags().String(APIEndpointFlag, APIEndpointDefault,
 		"Crusoe API Endpoint")
 	cmd.Flags().String(SocketAddressFlag, SocketAddressDefault,
 		"Socket which the gRPC server will listen on")

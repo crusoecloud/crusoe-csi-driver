@@ -31,6 +31,7 @@ const (
 	newFilePerms                     = 0o644
 )
 
+//nolint:gochecknoglobals // we will use this slice to determine what the node service supports
 var NodeServerCapabilities = []csi.NodeServiceCapability_RPC_Type{
 	csi.NodeServiceCapability_RPC_SINGLE_NODE_MULTI_WRITER,
 	csi.NodeServiceCapability_RPC_EXPAND_VOLUME,
@@ -38,7 +39,7 @@ var NodeServerCapabilities = []csi.NodeServiceCapability_RPC_Type{
 
 type NodeServer struct {
 	apiClient *crusoeapi.APIClient
-	driver    *DriverConfig
+	driver    *Config
 	mounter   *mount.SafeFormatAndMount
 }
 
@@ -46,7 +47,7 @@ func NewNodeServer() *NodeServer {
 	return &NodeServer{}
 }
 
-func (n *NodeServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConfig, _ []Service) error {
+func (n *NodeServer) Init(apiClient *crusoeapi.APIClient, driver *Config, _ []Service) error {
 	n.driver = driver
 	n.apiClient = apiClient
 	n.mounter = mount.NewSafeFormatAndMount(mount.New(""), exec.New())
@@ -60,15 +61,21 @@ func (n *NodeServer) RegisterServer(srv *grpc.Server) error {
 	return nil
 }
 
-func (n *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
+func (n *NodeServer) NodeStageVolume(_ context.Context,
+	_ *csi.NodeStageVolumeRequest,
+) (*csi.NodeStageVolumeResponse, error) {
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
-func (n *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
+func (n *NodeServer) NodeUnstageVolume(_ context.Context,
+	_ *csi.NodeUnstageVolumeRequest,
+) (*csi.NodeUnstageVolumeResponse, error) {
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
-func (n *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+func (n *NodeServer) NodePublishVolume(_ context.Context,
+	req *csi.NodePublishVolumeRequest,
+) (*csi.NodePublishVolumeResponse, error) {
 	klog.Infof("Received request to publish volume: %+v", req)
 	targetPath := req.GetTargetPath()
 	stagingTargetPath := req.GetStagingTargetPath()
@@ -101,7 +108,8 @@ func (n *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublish
 			// Directory does not exist, create it
 
 			if err := os.MkdirAll(dirPath, newDirPerms); err != nil {
-				return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to make directory for target path: %s", err.Error()))
+				return nil, status.Errorf(codes.Internal,
+					fmt.Sprintf("failed to make directory for target path: %s", err.Error()))
 			}
 		}
 
@@ -109,16 +117,19 @@ func (n *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublish
 		f, err := os.OpenFile(targetPath, os.O_CREATE, os.FileMode(newFilePerms))
 		if err != nil {
 			if !os.IsExist(err) {
-				return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to make file for target path: %s", err.Error()))
+				return nil, status.Errorf(codes.Internal,
+					fmt.Sprintf("failed to make file for target path: %s", err.Error()))
 			}
 		}
 		if err = f.Close(); err != nil {
-			return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to close file after making target path: %s", err.Error()))
+			return nil, status.Errorf(codes.Internal,
+				fmt.Sprintf("failed to close file after making target path: %s", err.Error()))
 		}
 
 		err = n.mounter.FormatAndMount(devicePath, targetPath, "", mountOpts)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to mount volume at target path: %s", err.Error()))
+			return nil, status.Errorf(codes.Internal,
+				fmt.Sprintf("failed to mount volume at target path: %s", err.Error()))
 		}
 	} else if volumeCapability.GetMount() != nil {
 		var sourcePath string
@@ -131,7 +142,8 @@ func (n *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublish
 		}
 		err = n.mounter.Mount(sourcePath, targetPath, fsType, mountOpts)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, fmt.Sprintf("failed to mount volume at target path: %s", err.Error()))
+			return nil, status.Errorf(codes.Internal,
+				fmt.Sprintf("failed to mount volume at target path: %s", err.Error()))
 		}
 	}
 
@@ -140,7 +152,9 @@ func (n *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublish
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func (n *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
+func (n *NodeServer) NodeUnpublishVolume(_ context.Context,
+	req *csi.NodeUnpublishVolumeRequest,
+) (*csi.NodeUnpublishVolumeResponse, error) {
 	klog.Infof("Received request to unpublish volume: %+v", req)
 
 	targetPath := req.GetTargetPath()
@@ -154,15 +168,21 @@ func (n *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpub
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-func (n *NodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
+func (n *NodeServer) NodeGetVolumeStats(_ context.Context,
+	_ *csi.NodeGetVolumeStatsRequest,
+) (*csi.NodeGetVolumeStatsResponse, error) {
 	return &csi.NodeGetVolumeStatsResponse{}, nil
 }
 
-func (n *NodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
+func (n *NodeServer) NodeExpandVolume(_ context.Context,
+	_ *csi.NodeExpandVolumeRequest,
+) (*csi.NodeExpandVolumeResponse, error) {
 	return &csi.NodeExpandVolumeResponse{}, nil
 }
 
-func (n *NodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
+func (n *NodeServer) NodeGetCapabilities(_ context.Context,
+	_ *csi.NodeGetCapabilitiesRequest,
+) (*csi.NodeGetCapabilitiesResponse, error) {
 	nodeCapabilities := make([]*csi.NodeServiceCapability, 0, len(NodeServerCapabilities))
 
 	for _, capability := range NodeServerCapabilities {
@@ -180,7 +200,7 @@ func (n *NodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCa
 	}, nil
 }
 
-func (n *NodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+func (n *NodeServer) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	// We want to provide useful topological hints to the container orchestrator
 	// We can only stage/publish volumes in the same location as a node
 	accessibleTopology := &csi.Topology{

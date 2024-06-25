@@ -19,13 +19,16 @@ import (
 )
 
 const (
-	pollInterval        = 2 * time.Second
-	BytesInGiB          = 1024 * 1024 * 1024
-	BytesInTiB          = 1024 * 1024 * 1024 * 1024
-	blockVolumeDiskType = "persistent-ssd"
-	mountVolumeDiskType = "shared-volume"
-	readOnlyDiskMode    = "read-only"
-	readWriteDiskMode   = "read-write"
+	pollInterval                 = 2 * time.Second
+	BytesInGiB                   = 1024 * 1024 * 1024
+	BytesInTiB                   = 1024 * 1024 * 1024 * 1024
+	blockVolumeDiskType          = "persistent-ssd"
+	mountVolumeDiskType          = "shared-volume"
+	readOnlyDiskMode             = "read-only"
+	readWriteDiskMode            = "read-write"
+	OpSucceeded         opStatus = "SUCCEEDED"
+	OpInProgress        opStatus = "IN_PROGRESS"
+	OpFailed            opStatus = "FAILED"
 )
 
 // apiError models the error format returned by the Crusoe API go client.
@@ -42,15 +45,13 @@ type opResultError struct {
 }
 
 var (
-	OpSucceeded  opStatus = "SUCCEEDED"
-	OpInProgress opStatus = "IN_PROGRESS"
-	OpFailed     opStatus = "FAILED"
-
 	errUnableToGetOpRes            = errors.New("failed to get result of operation")
 	errUnsupportedVolumeAccessMode = errors.New("failed to get result of operation")
-	// fallback error presented to the user in unexpected situations
-	errUnexpected = errors.New("An unexpected error occurred. Please try again, and if the problem persists, contact support@crusoecloud.com.")
+	// fallback error presented to the user in unexpected situations.
+	errUnexpected = errors.New("an unexpected error occurred, please try again, and if the problem persists, " +
+		"contact support@crusoecloud.com.")
 
+	//nolint:gochecknoglobals // use this map to determine what capabilities are supported
 	supportedBlockVolumeAccessMode = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER:        {},
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY:   {},
@@ -58,6 +59,7 @@ var (
 		csi.VolumeCapability_AccessMode_MULTI_NODE_SINGLE_WRITER:  {},
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_SINGLE_WRITER: {},
 	}
+	//nolint:gochecknoglobals // use this map to determine what capabilities are supported
 	supportedMountVolumeAccessMode = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
 		csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER:  {},
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_MULTI_WRITER: {},
@@ -172,14 +174,17 @@ func awaitOperationAndResolve[T any](ctx context.Context, op *crusoeapi.Operatio
 	return result, op, nil
 }
 
-func createDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID string, createReq *crusoeapi.DisksPostRequestV1Alpha5) (*crusoeapi.DiskV1Alpha5, error) {
+func createDisk(ctx context.Context, apiClient *crusoeapi.APIClient,
+	projectID string, createReq *crusoeapi.DisksPostRequestV1Alpha5,
+) (*crusoeapi.DiskV1Alpha5, error) {
 	dataResp, httpResp, err := apiClient.DisksApi.CreateDisk(ctx, *createReq, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to start a create disk operation: %w", err)
+		return nil, fmt.Errorf("failed to start a create disk operation: %w", err)
 	}
 	defer httpResp.Body.Close()
 
-	disk, _, err := awaitOperationAndResolve[crusoeapi.DiskV1Alpha5](ctx, dataResp.Operation, projectID, apiClient.DiskOperationsApi.GetStorageDisksOperation)
+	disk, _, err := awaitOperationAndResolve[crusoeapi.DiskV1Alpha5](ctx, dataResp.Operation, projectID,
+		apiClient.DiskOperationsApi.GetStorageDisksOperation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create disk: %w", err)
 	}
@@ -187,14 +192,17 @@ func createDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID s
 	return disk, nil
 }
 
-func attachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, vmID string, attachReq *crusoeapi.InstancesAttachDiskPostRequestV1Alpha5) error {
+func attachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, vmID string,
+	attachReq *crusoeapi.InstancesAttachDiskPostRequestV1Alpha5,
+) error {
 	dataResp, httpResp, err := apiClient.VMsApi.UpdateInstanceAttachDisks(ctx, *attachReq, projectID, vmID)
 	if err != nil {
-		return fmt.Errorf("Failed to start an attach disk operation: %w", err)
+		return fmt.Errorf("failed to start an attach disk operation: %w", err)
 	}
 	defer httpResp.Body.Close()
 
-	_, err = awaitOperation(ctx, dataResp.Operation, projectID, apiClient.VMOperationsApi.GetComputeVMsInstancesOperation)
+	_, err = awaitOperation(ctx, dataResp.Operation, projectID,
+		apiClient.VMOperationsApi.GetComputeVMsInstancesOperation)
 	if err != nil {
 		return fmt.Errorf("failed to attach disk: %w", err)
 	}
@@ -202,14 +210,17 @@ func attachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, 
 	return nil
 }
 
-func detachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, vmID string, detachReq *crusoeapi.InstancesDetachDiskPostRequest) error {
+func detachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, vmID string,
+	detachReq *crusoeapi.InstancesDetachDiskPostRequest,
+) error {
 	dataResp, httpResp, err := apiClient.VMsApi.UpdateInstanceDetachDisks(ctx, *detachReq, projectID, vmID)
 	if err != nil {
-		return fmt.Errorf("Failed to start a detach disk operation: %w", err)
+		return fmt.Errorf("failed to start a detach disk operation: %w", err)
 	}
 	defer httpResp.Body.Close()
 
-	_, err = awaitOperation(ctx, dataResp.Operation, projectID, apiClient.VMOperationsApi.GetComputeVMsInstancesOperation)
+	_, err = awaitOperation(ctx, dataResp.Operation, projectID,
+		apiClient.VMOperationsApi.GetComputeVMsInstancesOperation)
 	if err != nil {
 		return fmt.Errorf("failed to detach disk: %w", err)
 	}
@@ -217,14 +228,17 @@ func detachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, 
 	return nil
 }
 
-func updateDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, diskID string, updateReq *crusoeapi.DisksPatchRequest) (*crusoeapi.DiskV1Alpha5, error) {
+func updateDisk(ctx context.Context, apiClient *crusoeapi.APIClient,
+	projectID, diskID string, updateReq *crusoeapi.DisksPatchRequest,
+) (*crusoeapi.DiskV1Alpha5, error) {
 	dataResp, httpResp, err := apiClient.DisksApi.ResizeDisk(ctx, *updateReq, projectID, diskID)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to start a create disk operation: %w", err)
+		return nil, fmt.Errorf("failed to start a create disk operation: %w", err)
 	}
 	defer httpResp.Body.Close()
 
-	disk, _, err := awaitOperationAndResolve[crusoeapi.DiskV1Alpha5](ctx, dataResp.Operation, projectID, apiClient.DiskOperationsApi.GetStorageDisksOperation)
+	disk, _, err := awaitOperationAndResolve[crusoeapi.DiskV1Alpha5](ctx, dataResp.Operation, projectID,
+		apiClient.DiskOperationsApi.GetStorageDisksOperation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create disk: %w", err)
 	}
@@ -247,7 +261,9 @@ func deleteDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, 
 	return nil
 }
 
-func findDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, name string) (*crusoeapi.DiskV1Alpha5, error) {
+func findDisk(ctx context.Context, apiClient *crusoeapi.APIClient,
+	projectID, name string,
+) (*crusoeapi.DiskV1Alpha5, error) {
 	disks, httpResp, listErr := apiClient.DisksApi.ListDisks(ctx, projectID)
 	if listErr != nil {
 		return nil, fmt.Errorf("error checking if volume exists: %w", listErr)
@@ -266,7 +282,9 @@ func findDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, na
 	return foundDisk, nil
 }
 
-func getDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, diskID string) (*crusoeapi.DiskV1Alpha5, error) {
+func getDisk(ctx context.Context, apiClient *crusoeapi.APIClient,
+	projectID, diskID string,
+) (*crusoeapi.DiskV1Alpha5, error) {
 	disk, httpResp, listErr := apiClient.DisksApi.GetDisk(ctx, projectID, diskID)
 	if listErr != nil {
 		return nil, fmt.Errorf("error checking if volume exists: %w", listErr)
@@ -383,7 +401,9 @@ func getDiskTypeFromVolumeType(capabilities []*csi.VolumeCapability) string {
 	return ""
 }
 
-func getCreateDiskRequest(name, capacity, location string, capabilities []*csi.VolumeCapability) *crusoeapi.DisksPostRequestV1Alpha5 {
+func getCreateDiskRequest(name, capacity, location string,
+	capabilities []*csi.VolumeCapability,
+) *crusoeapi.DisksPostRequestV1Alpha5 {
 	params := &crusoeapi.DisksPostRequestV1Alpha5{
 		Name:     name,
 		Size:     capacity,
@@ -474,14 +494,16 @@ func GetInstanceID(ctx context.Context, client *crusoeapi.APIClient) (
 	return instance.Id, instance.ProjectId, instance.Location, nil
 }
 
-func findInstance(ctx context.Context, client *crusoeapi.APIClient, instanceName string) (*crusoeapi.InstanceV1Alpha5, error) {
+func findInstance(ctx context.Context,
+	client *crusoeapi.APIClient, instanceName string,
+) (*crusoeapi.InstanceV1Alpha5, error) {
 	opts := &crusoeapi.ProjectsApiListProjectsOpts{
 		OrgId: optional.EmptyString(),
 	}
 
-	projectsResp, projectHttpResp, err := client.ProjectsApi.ListProjects(ctx, opts)
+	projectsResp, projectHTTPResp, err := client.ProjectsApi.ListProjects(ctx, opts)
 
-	defer projectHttpResp.Body.Close()
+	defer projectHTTPResp.Body.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to query for projects: %w", err)
 	}
@@ -490,11 +512,11 @@ func findInstance(ctx context.Context, client *crusoeapi.APIClient, instanceName
 		listVMOpts := &crusoeapi.VMsApiListInstancesOpts{
 			Names: optional.NewString(instanceName),
 		}
-		instances, instancesHttpResp, instancesErr := client.VMsApi.ListInstances(ctx, project.Id, listVMOpts)
+		instances, instancesHTTPResp, instancesErr := client.VMsApi.ListInstances(ctx, project.Id, listVMOpts)
 		if instancesErr != nil {
 			return nil, instancesErr
 		}
-		instancesHttpResp.Body.Close()
+		instancesHTTPResp.Body.Close()
 
 		if len(instances.Items) == 0 {
 			continue

@@ -130,8 +130,8 @@ func canonicalizeQuery(query string) (canonicalQuery string, err error) {
 		if key == "" {
 			continue
 		}
-		value := ""
-		key, value, _ = strings.Cut(key, "=")
+
+		key, value, _ := strings.Cut(key, "=")
 		key, err1 := url.QueryUnescape(key)
 		if err1 != nil {
 			if err == nil {
