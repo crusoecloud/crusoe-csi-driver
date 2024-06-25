@@ -49,7 +49,19 @@ var (
 	errUnsupportedVolumeAccessMode = errors.New("failed to get result of operation")
 	// fallback error presented to the user in unexpected situations.
 	errUnexpected = errors.New("an unexpected error occurred, please try again, and if the problem persists, " +
-		"contact support@crusoecloud.com.")
+		"contact support@crusoecloud.com")
+	errBadFQDN                    = errors.New("fqdn in unexpected format")
+	errUnexpectedVolumeCapability = errors.New("unknown volume capability")
+	errDiskDifferentSize          = errors.New("disk has different size")
+	errDiskDifferentName          = errors.New("disk has different name")
+	errDiskDifferentLocation      = errors.New("disk has different location")
+	errDiskDifferentBlockSize     = errors.New("disk has different block size")
+	errDiskDifferentType          = errors.New("disk has different type")
+	errInstanceNotFound           = errors.New("instance not found")
+	errUnsupportedMountAccessMode = errors.New("unsupported access mode for mount volume")
+	errUnsupportedBlockAccessMode = errors.New("unsupported access mode for block volume")
+	errNoCapabilitiesSpecified    = errors.New("neither block nor mount capability specified")
+	errBlockAndMountSpecified     = errors.New("both block and mount capabilities specified")
 
 	//nolint:gochecknoglobals // use this map to determine what capabilities are supported
 	supportedBlockVolumeAccessMode = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
@@ -310,6 +322,7 @@ func convertStorageUnitToBytes(storageStr string) (int64, error) {
 	case "TiB":
 		totalBytes = int64(value * BytesInTiB)
 	default:
+		//nolint:goerr113 // use dynamic errors for more informative error handling
 		return 0, fmt.Errorf("received invalid unit: %s", unit)
 	}
 
@@ -359,19 +372,20 @@ func getVolumeFromDisk(disk *crusoeapi.DiskV1Alpha5) (*csi.Volume, error) {
 	}, nil
 }
 
+//nolint:cyclop // complexity comes from argument validation
 func validateVolumeCapabilities(capabilities []*csi.VolumeCapability) error {
 	for _, capability := range capabilities {
 		if capability.GetBlock() != nil && capability.GetMount() != nil {
-			return fmt.Errorf("neither block nor mount capability specified")
+			return errNoCapabilitiesSpecified
 		}
 		if capability.GetBlock() == nil && capability.GetMount() == nil {
-			return fmt.Errorf("both block and mount capabilities specified")
+			return errBlockAndMountSpecified
 		}
 
 		accessMode := capability.GetAccessMode().GetMode()
 		if capability.GetBlock() != nil {
 			if _, ok := supportedBlockVolumeAccessMode[accessMode]; !ok {
-				return fmt.Errorf("unsupported access mode for block volume: %s", accessMode)
+				return fmt.Errorf("%w: %s", errUnsupportedBlockAccessMode, accessMode)
 			}
 		}
 		if capability.GetMount() != nil {
@@ -380,7 +394,7 @@ func validateVolumeCapabilities(capabilities []*csi.VolumeCapability) error {
 
 			// mount volumes can do everything block can too
 			if !blockOk && !mountOk {
-				return fmt.Errorf("unsupported access mode for mount volume: %s", accessMode)
+				return fmt.Errorf("%w: %s", errUnsupportedMountAccessMode, accessMode)
 			}
 		}
 	}
@@ -417,19 +431,19 @@ func getCreateDiskRequest(name, capacity, location string,
 
 func verifyExistingDisk(currentDisk *crusoeapi.DiskV1Alpha5, createReq *crusoeapi.DisksPostRequestV1Alpha5) error {
 	if currentDisk.Size != createReq.Size {
-		return fmt.Errorf("disk has different size")
+		return errDiskDifferentSize
 	}
 	if currentDisk.Name != createReq.Name {
-		return fmt.Errorf("disk has different name")
+		return errDiskDifferentName
 	}
 	if currentDisk.Location != createReq.Location {
-		return fmt.Errorf("disk has different location")
+		return errDiskDifferentLocation
 	}
 	if currentDisk.BlockSize != createReq.BlockSize {
-		return fmt.Errorf("disk has different block size")
+		return errDiskDifferentBlockSize
 	}
 	if currentDisk.Type_ != createReq.Type_ {
-		return fmt.Errorf("disk has different type")
+		return errDiskDifferentType
 	}
 
 	return nil
@@ -464,7 +478,7 @@ func getAttachmentTypeFromVolumeCapability(capability *csi.VolumeCapability) (st
 		csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY:
 		return readOnlyDiskMode, nil
 	case csi.VolumeCapability_AccessMode_UNKNOWN:
-		return "", errors.New("unknown volume capability")
+		return "", errUnexpectedVolumeCapability
 	}
 
 	return "", fmt.Errorf("%w: %s", errUnsupportedVolumeAccessMode, accessMode.String())
@@ -481,7 +495,7 @@ func GetInstanceID(ctx context.Context, client *crusoeapi.APIClient) (
 
 	fqdnSlice := strings.Split(fqdn, ".")
 	if len(fqdnSlice) < 1 {
-		return "", "", "", fmt.Errorf("bad fqdn")
+		return "", "", "", errBadFQDN
 	}
 
 	vmName := fqdnSlice[0]
@@ -514,7 +528,7 @@ func findInstance(ctx context.Context,
 		}
 		instances, instancesHTTPResp, instancesErr := client.VMsApi.ListInstances(ctx, project.Id, listVMOpts)
 		if instancesErr != nil {
-			return nil, instancesErr
+			return nil, fmt.Errorf("failed to list instances: %w", instancesErr)
 		}
 		instancesHTTPResp.Body.Close()
 
@@ -529,7 +543,7 @@ func findInstance(ctx context.Context,
 		}
 	}
 
-	return nil, fmt.Errorf("instance not found")
+	return nil, errInstanceNotFound
 }
 
 func getPersistentSSDDevicePath(serialNumber string) string {

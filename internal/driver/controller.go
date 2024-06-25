@@ -219,42 +219,49 @@ func (c *ControllerServer) ValidateVolumeCapabilities(ctx context.Context,
 	}, nil
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (c *ControllerServer) ListVolumes(_ context.Context,
 	_ *csi.ListVolumesRequest,
 ) (*csi.ListVolumesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (c *ControllerServer) ControllerGetVolume(_ context.Context,
 	_ *csi.ControllerGetVolumeRequest,
 ) (*csi.ControllerGetVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (c *ControllerServer) GetCapacity(_ context.Context,
 	_ *csi.GetCapacityRequest,
 ) (*csi.GetCapacityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (c *ControllerServer) CreateSnapshot(_ context.Context,
 	_ *csi.CreateSnapshotRequest,
 ) (*csi.CreateSnapshotResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (c *ControllerServer) DeleteSnapshot(_ context.Context,
 	_ *csi.DeleteSnapshotRequest,
 ) (*csi.DeleteSnapshotResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (c *ControllerServer) ListSnapshots(_ context.Context,
 	_ *csi.ListSnapshotsRequest,
 ) (*csi.ListSnapshotsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (c *ControllerServer) ControllerModifyVolume(_ context.Context,
 	_ *csi.ControllerModifyVolumeRequest,
 ) (*csi.ControllerModifyVolumeResponse, error) {

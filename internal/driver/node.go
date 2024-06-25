@@ -31,6 +31,8 @@ const (
 	newFilePerms                     = 0o644
 )
 
+var errVolumeMissingSerialNumber = errors.New("volume missing serial number context key")
+
 //nolint:gochecknoglobals // we will use this slice to determine what the node service supports
 var NodeServerCapabilities = []csi.NodeServiceCapability_RPC_Type{
 	csi.NodeServiceCapability_RPC_SINGLE_NODE_MULTI_WRITER,
@@ -95,41 +97,9 @@ func (n *NodeServer) NodePublishVolume(_ context.Context,
 	}
 
 	if volumeCapability.GetBlock() != nil {
-		volumeContext := req.GetVolumeContext()
-		serialNumber, ok := volumeContext[VolumeContextDiskSerialNumberKey]
-		if !ok {
-			return nil, status.Errorf(codes.FailedPrecondition, "volume missing serial number context key")
-		}
-
-		devicePath := getPersistentSSDDevicePath(serialNumber)
-		dirPath := filepath.Dir(targetPath)
-		// Check if the directory exists
-		if _, err := os.Stat(dirPath); errors.Is(err, os.ErrNotExist) {
-			// Directory does not exist, create it
-
-			if err := os.MkdirAll(dirPath, newDirPerms); err != nil {
-				return nil, status.Errorf(codes.Internal,
-					fmt.Sprintf("failed to make directory for target path: %s", err.Error()))
-			}
-		}
-
-		// expose the block volume as a file
-		f, err := os.OpenFile(targetPath, os.O_CREATE, os.FileMode(newFilePerms))
-		if err != nil {
-			if !os.IsExist(err) {
-				return nil, status.Errorf(codes.Internal,
-					fmt.Sprintf("failed to make file for target path: %s", err.Error()))
-			}
-		}
-		if err = f.Close(); err != nil {
-			return nil, status.Errorf(codes.Internal,
-				fmt.Sprintf("failed to close file after making target path: %s", err.Error()))
-		}
-
-		err = n.mounter.FormatAndMount(devicePath, targetPath, "", mountOpts)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal,
-				fmt.Sprintf("failed to mount volume at target path: %s", err.Error()))
+		mountErr := publishBlockVolume(req, targetPath, n.mounter, mountOpts)
+		if mountErr != nil {
+			return nil, status.Errorf(codes.Internal, "failed to mount volume: %s", mountErr.Error())
 		}
 	} else if volumeCapability.GetMount() != nil {
 		var sourcePath string
@@ -138,7 +108,8 @@ func (n *NodeServer) NodePublishVolume(_ context.Context,
 		mountOpts = append(mountOpts, volumeCapability.GetMount().GetMountFlags()...)
 		err := os.MkdirAll(sourcePath, newDirPerms)
 		if err != nil {
-			return nil, err
+			return nil, status.Errorf(codes.Internal,
+				fmt.Sprintf("failed to make directory at target path: %s", err.Error()))
 		}
 		err = n.mounter.Mount(sourcePath, targetPath, fsType, mountOpts)
 		if err != nil {
@@ -150,6 +121,44 @@ func (n *NodeServer) NodePublishVolume(_ context.Context,
 	klog.Infof("Successfully published volume: %s", req.GetVolumeId())
 
 	return &csi.NodePublishVolumeResponse{}, nil
+}
+
+func publishBlockVolume(req *csi.NodePublishVolumeRequest, targetPath string,
+	mounter *mount.SafeFormatAndMount, mountOpts []string,
+) error {
+	volumeContext := req.GetVolumeContext()
+	serialNumber, ok := volumeContext[VolumeContextDiskSerialNumberKey]
+	if !ok {
+		return errVolumeMissingSerialNumber
+	}
+
+	devicePath := getPersistentSSDDevicePath(serialNumber)
+	dirPath := filepath.Dir(targetPath)
+	// Check if the directory exists
+	if _, err := os.Stat(dirPath); errors.Is(err, os.ErrNotExist) {
+		// Directory does not exist, create it
+		if err := os.MkdirAll(dirPath, newDirPerms); err != nil {
+			return fmt.Errorf("failed to make directory for target path: %w", err)
+		}
+	}
+
+	// expose the block volume as a file
+	f, err := os.OpenFile(targetPath, os.O_CREATE, os.FileMode(newFilePerms))
+	if err != nil {
+		if !os.IsExist(err) {
+			return fmt.Errorf("failed to make file for target path: %w", err)
+		}
+	}
+	if err = f.Close(); err != nil {
+		return fmt.Errorf("failed to close file after making target path: %w", err)
+	}
+
+	err = mounter.FormatAndMount(devicePath, targetPath, "", mountOpts)
+	if err != nil {
+		return fmt.Errorf("failed to mount volume at target path: %w", err)
+	}
+
+	return nil
 }
 
 func (n *NodeServer) NodeUnpublishVolume(_ context.Context,
