@@ -17,7 +17,7 @@ spec:
       serviceAccountName: crusoe-csi-driver-controller-sa
       containers:
         - name: crusoe-csi-driver
-          image: "registry.gitlab.com/crusoeenergy/island/external/crusoe-csi-driver:latest"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           args: ["--services", "controller,identity", "--socket-address", "unix:/csi/csi-controller.sock"]
           env:
             - name: POD_NAME

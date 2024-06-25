@@ -7,6 +7,8 @@ image:
   repository: registry.gitlab.com/crusoeenergy/island/external/crusoe-csi-driver
   tag: "latest"
 
+driverName: "csi.crusoe.ai"
+
 resources: {}
 
 ingress: {}
