@@ -6,12 +6,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 	"net/http"
 	"net/url"
 	"sort"
 	"strings"
 	"time"
+
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 )
 
 // AuthenticatingTransport is a struct implementing http.Roundtripper

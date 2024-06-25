@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
 	"github.com/crusoecloud/crusoe-csi-driver/internal"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/config"
-	"github.com/spf13/cobra"
-	"os"
 )
 
 // Start executing the Crusoe CSI driver.

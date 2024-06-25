@@ -19,6 +19,7 @@ RUN make cross
 ################################################################
 FROM alpine
 
+# Need to get these updates for k8s mount-utils library to work properly
 RUN apk update && \
     apk add --no-cache e2fsprogs && \
     apk add --no-cache blkid && \

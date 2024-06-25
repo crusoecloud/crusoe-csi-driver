@@ -3,12 +3,6 @@ package internal
 import (
 	"context"
 	"fmt"
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
-	"github.com/crusoecloud/crusoe-csi-driver/internal/config"
-	"github.com/crusoecloud/crusoe-csi-driver/internal/driver"
-	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
-	"k8s.io/klog/v2"
 	"net"
 	"net/url"
 	"os"
@@ -17,6 +11,22 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
+	"k8s.io/klog/v2"
+
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	"github.com/crusoecloud/crusoe-csi-driver/internal/config"
+	"github.com/crusoecloud/crusoe-csi-driver/internal/driver"
+)
+
+const (
+	maxRetries           = 10
+	retryIntervalSeconds = 5
+	identityArg          = "identity"
+	controllerArg        = "controller"
+	nodeArg              = "node"
 )
 
 type service interface {
@@ -26,7 +36,6 @@ type service interface {
 
 // RunDriver starts up and runs the Crusoe Cloud CSI Driver.
 func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
-
 	// Listen for interrupt signals.
 	interrupt := make(chan os.Signal, 1)
 	// Ctrl-C
@@ -63,11 +72,11 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	requestedServices := []driver.Service{}
 	for _, reqService := range services {
 		switch reqService {
-		case "identity":
+		case identityArg:
 			requestedServices = append(requestedServices, driver.IdentityService)
-		case "controller":
+		case controllerArg:
 			requestedServices = append(requestedServices, driver.ControllerService)
-		case "node":
+		case nodeArg:
 			requestedServices = append(requestedServices, driver.NodeService)
 		default:
 			return fmt.Errorf("received unknown service type: %s", reqService)
@@ -98,16 +107,20 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 			// let's wait and try again
 			if strings.Contains(listenErr.Error(), "bind: address already in use") {
 				klog.Infof("Address (%s//%s) already in use, retrying...", endpointURL.Scheme, endpointURL.Path)
-				time.Sleep(5 * time.Second)
-				if tryCount == 10 {
+				time.Sleep(retryIntervalSeconds * time.Second)
+
+				if tryCount == maxRetries {
 					return listenErr
 				}
 				tryCount++
+
 				continue
 			}
+
 			return listenErr
 		}
 		listener = tryListener
+
 		break
 	}
 
@@ -149,14 +162,14 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 
 	// Initialize gRPC services and register with the gRPC servers
 	for _, server := range grpcServers {
-		err := server.Init(apiClient, crusoeDriver, requestedServices)
-		if err != nil {
-			return err
+		initErr := server.Init(apiClient, crusoeDriver, requestedServices)
+		if initErr != nil {
+			return initErr
 		}
 
-		err = server.RegisterServer(srv)
-		if err != nil {
-			return err
+		registerErr := server.RegisterServer(srv)
+		if registerErr != nil {
+			return registerErr
 		}
 	}
 

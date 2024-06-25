@@ -5,15 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/antihax/optional"
-	"github.com/container-storage-interface/spec/lib/go/csi"
-	swagger "github.com/crusoecloud/client-go/swagger/v1alpha4"
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/antihax/optional"
+	"github.com/container-storage-interface/spec/lib/go/csi"
+
+	swagger "github.com/crusoecloud/client-go/swagger/v1alpha4"
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 )
 
 const (
@@ -24,7 +26,6 @@ const (
 	mountVolumeDiskType = "shared-volume"
 	readOnlyDiskMode    = "read-only"
 	readWriteDiskMode   = "read-write"
-	identifierDelimiter = "|"
 )
 
 // apiError models the error format returned by the Crusoe API go client.
@@ -58,13 +59,8 @@ var (
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_SINGLE_WRITER: {},
 	}
 	supportedMountVolumeAccessMode = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
-		csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER:        {},
-		csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY:   {},
-		csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY:    {},
-		csi.VolumeCapability_AccessMode_MULTI_NODE_SINGLE_WRITER:  {},
-		csi.VolumeCapability_AccessMode_SINGLE_NODE_SINGLE_WRITER: {},
-		csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER:   {},
-		csi.VolumeCapability_AccessMode_SINGLE_NODE_MULTI_WRITER:  {},
+		csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER:  {},
+		csi.VolumeCapability_AccessMode_SINGLE_NODE_MULTI_WRITER: {},
 	}
 )
 
@@ -176,8 +172,8 @@ func awaitOperationAndResolve[T any](ctx context.Context, op *crusoeapi.Operatio
 	return result, op, nil
 }
 
-func createDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID string, createReq crusoeapi.DisksPostRequestV1Alpha5) (*crusoeapi.DiskV1Alpha5, error) {
-	dataResp, httpResp, err := apiClient.DisksApi.CreateDisk(ctx, createReq, projectID)
+func createDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID string, createReq *crusoeapi.DisksPostRequestV1Alpha5) (*crusoeapi.DiskV1Alpha5, error) {
+	dataResp, httpResp, err := apiClient.DisksApi.CreateDisk(ctx, *createReq, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to start a create disk operation: %w", err)
 	}
@@ -191,14 +187,14 @@ func createDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID s
 	return disk, nil
 }
 
-func attachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, vmID string, attachReq crusoeapi.InstancesAttachDiskPostRequestV1Alpha5) error {
-	dataResp, httpResp, err := apiClient.VMsApi.UpdateInstanceAttachDisks(ctx, attachReq, projectID, vmID)
+func attachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, vmID string, attachReq *crusoeapi.InstancesAttachDiskPostRequestV1Alpha5) error {
+	dataResp, httpResp, err := apiClient.VMsApi.UpdateInstanceAttachDisks(ctx, *attachReq, projectID, vmID)
 	if err != nil {
 		return fmt.Errorf("Failed to start an attach disk operation: %w", err)
 	}
 	defer httpResp.Body.Close()
 
-	_, err = awaitOperation(ctx, dataResp.Operation, projectID, apiClient.DiskOperationsApi.GetStorageDisksOperation)
+	_, err = awaitOperation(ctx, dataResp.Operation, projectID, apiClient.VMOperationsApi.GetComputeVMsInstancesOperation)
 	if err != nil {
 		return fmt.Errorf("failed to attach disk: %w", err)
 	}
@@ -206,14 +202,14 @@ func attachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, 
 	return nil
 }
 
-func detachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, vmID string, detachReq crusoeapi.InstancesDetachDiskPostRequest) error {
-	dataResp, httpResp, err := apiClient.VMsApi.UpdateInstanceDetachDisks(ctx, detachReq, projectID, vmID)
+func detachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, vmID string, detachReq *crusoeapi.InstancesDetachDiskPostRequest) error {
+	dataResp, httpResp, err := apiClient.VMsApi.UpdateInstanceDetachDisks(ctx, *detachReq, projectID, vmID)
 	if err != nil {
 		return fmt.Errorf("Failed to start a detach disk operation: %w", err)
 	}
 	defer httpResp.Body.Close()
 
-	_, err = awaitOperation(ctx, dataResp.Operation, projectID, apiClient.DiskOperationsApi.GetStorageDisksOperation)
+	_, err = awaitOperation(ctx, dataResp.Operation, projectID, apiClient.VMOperationsApi.GetComputeVMsInstancesOperation)
 	if err != nil {
 		return fmt.Errorf("failed to detach disk: %w", err)
 	}
@@ -221,8 +217,8 @@ func detachDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, 
 	return nil
 }
 
-func updateDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, diskID string, updateReq crusoeapi.DisksPatchRequest) (*crusoeapi.DiskV1Alpha5, error) {
-	dataResp, httpResp, err := apiClient.DisksApi.ResizeDisk(ctx, updateReq, projectID, diskID)
+func updateDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, diskID string, updateReq *crusoeapi.DisksPatchRequest) (*crusoeapi.DiskV1Alpha5, error) {
+	dataResp, httpResp, err := apiClient.DisksApi.ResizeDisk(ctx, *updateReq, projectID, diskID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to start a create disk operation: %w", err)
 	}
@@ -262,6 +258,7 @@ func findDisk(ctx context.Context, apiClient *crusoeapi.APIClient, projectID, na
 		currDisk := disks.Items[i]
 		if currDisk.Name == name {
 			foundDisk = &currDisk
+
 			break
 		}
 	}
@@ -285,7 +282,7 @@ func convertStorageUnitToBytes(storageStr string) (int64, error) {
 
 	value, err := strconv.Atoi(valueStr)
 	if err != nil {
-		return 0, fmt.Errorf("invalid numeric value: %v", err)
+		return 0, fmt.Errorf("invalid numeric value: %w", err)
 	}
 
 	var totalBytes int64
@@ -319,7 +316,6 @@ func convertBytesToStorageUnit(bytes int64) string {
 
 func getVolumeFromDisk(disk *crusoeapi.DiskV1Alpha5) (*csi.Volume, error) {
 	volBytes, err := convertStorageUnitToBytes(disk.Size)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse disk storage: %w", err)
 	}
@@ -332,6 +328,7 @@ func getVolumeFromDisk(disk *crusoeapi.DiskV1Alpha5) (*csi.Volume, error) {
 	}
 
 	volumeContext := map[string]string{
+		VolumeContextDiskTypeKey:         disk.Type_,
 		VolumeContextDiskSerialNumberKey: disk.SerialNumber,
 	}
 
@@ -360,7 +357,11 @@ func validateVolumeCapabilities(capabilities []*csi.VolumeCapability) error {
 			}
 		}
 		if capability.GetMount() != nil {
-			if _, ok := supportedMountVolumeAccessMode[accessMode]; !ok {
+			_, mountOk := supportedMountVolumeAccessMode[accessMode]
+			_, blockOk := supportedBlockVolumeAccessMode[accessMode]
+
+			// mount volumes can do everything block can too
+			if !blockOk && !mountOk {
 				return fmt.Errorf("unsupported access mode for mount volume: %s", accessMode)
 			}
 		}
@@ -369,11 +370,12 @@ func validateVolumeCapabilities(capabilities []*csi.VolumeCapability) error {
 	return nil
 }
 
-func getDiskTypFromVolumeType(capabilities []*csi.VolumeCapability) string {
+func getDiskTypeFromVolumeType(capabilities []*csi.VolumeCapability) string {
 	for _, capability := range capabilities {
-		if capability.GetMount() != nil {
+		accessMode := capability.GetAccessMode().GetMode()
+		if _, mountOk := supportedMountVolumeAccessMode[accessMode]; mountOk {
 			return mountVolumeDiskType
-		} else if capability.GetBlock() != nil {
+		} else if _, blockOk := supportedMountVolumeAccessMode[accessMode]; blockOk {
 			return blockVolumeDiskType
 		}
 	}
@@ -388,7 +390,7 @@ func getCreateDiskRequest(name, capacity, location string, capabilities []*csi.V
 		Location: location,
 	}
 
-	params.Type_ = getDiskTypFromVolumeType(capabilities)
+	params.Type_ = getDiskTypeFromVolumeType(capabilities)
 
 	return params
 }
@@ -414,11 +416,13 @@ func verifyExistingDisk(currentDisk *crusoeapi.DiskV1Alpha5, createReq *crusoeap
 }
 
 func parseCapacity(capacityRange *csi.CapacityRange) string {
+	// Note: both RequiredBytes and LimitBytes SHOULD be set to the same value,
+	// however, it is only guaranteed that one of them is set.
 	reqBytes := capacityRange.GetRequiredBytes()
 	if reqBytes == 0 {
 		reqBytes = capacityRange.GetLimitBytes()
 	}
-	reqCapacity := convertBytesToStorageUnit(capacityRange.GetRequiredBytes())
+	reqCapacity := convertBytesToStorageUnit(reqBytes)
 
 	return reqCapacity
 }
@@ -439,7 +443,8 @@ func getAttachmentTypeFromVolumeCapability(capability *csi.VolumeCapability) (st
 	case csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY,
 		csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY:
 		return readOnlyDiskMode, nil
-
+	case csi.VolumeCapability_AccessMode_UNKNOWN:
+		return "", errors.New("unknown volume capability")
 	}
 
 	return "", fmt.Errorf("%w: %s", errUnsupportedVolumeAccessMode, accessMode.String())
@@ -463,7 +468,7 @@ func GetInstanceID(ctx context.Context, client *crusoeapi.APIClient) (
 
 	instance, err := findInstance(ctx, client, vmName)
 	if err != nil {
-		return "", "", "", fmt.Errorf("could not find instance (%s): %v", vmName, err)
+		return "", "", "", fmt.Errorf("could not find instance (%s): %w", vmName, err)
 	}
 
 	return instance.Id, instance.ProjectId, instance.Location, nil
@@ -503,6 +508,11 @@ func findInstance(ctx context.Context, client *crusoeapi.APIClient, instanceName
 	}
 
 	return nil, fmt.Errorf("instance not found")
+}
+
+func getPersistentSSDDevicePath(serialNumber string) string {
+	// symlink: /dev/disk/by-id/virtio-<serial-number>
+	return fmt.Sprintf("/dev/disk/by-id/virtio-%s", serialNumber)
 }
 
 func ReadEnvVar(secretName string) string {

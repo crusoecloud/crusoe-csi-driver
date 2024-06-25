@@ -24,6 +24,7 @@ func (l *Locker) AcquireReadLock(id string) bool {
 		l.locks[id] = rwLock
 	}
 	l.mx.Unlock()
+
 	return rwLock.TryRLock()
 }
 

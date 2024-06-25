@@ -2,11 +2,13 @@ package config
 
 import "github.com/spf13/cobra"
 
-const ApiEndpointFlag = "api-endpoint"
-const ApiEndpointDefault = "https://api.crusoecloud.com/v1alpha5"
-const SocketAddressFlag = "socket-address"
-const SocketAddressDefault = "unix:/tmp/csi.sock"
-const ServicesFlag = "services"
+const (
+	ApiEndpointFlag      = "api-endpoint"
+	ApiEndpointDefault   = "https://api.crusoecloud.com/v1alpha5"
+	SocketAddressFlag    = "socket-address"
+	SocketAddressDefault = "unix:/tmp/csi.sock"
+	ServicesFlag         = "services"
+)
 
 // AddFlags attaches the CLI flags the CSI Driver needs to the provided command.
 func AddFlags(cmd *cobra.Command) {

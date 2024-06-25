@@ -2,9 +2,11 @@ package driver
 
 import (
 	"context"
+
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 	"google.golang.org/grpc"
+
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 )
 
 type IdentityServer struct {
@@ -39,7 +41,6 @@ func (i *IdentityServer) Init(apiClient *crusoeapi.APIClient, driver *DriverConf
 	for _, service := range services {
 		if service == ControllerService {
 			i.capabilities = append(i.capabilities, &csi.PluginCapability{
-
 				Type: &csi.PluginCapability_Service_{
 					Service: &csi.PluginCapability_Service{
 						Type: csi.PluginCapability_Service_CONTROLLER_SERVICE,
