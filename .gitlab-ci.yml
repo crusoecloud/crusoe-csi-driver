@@ -30,9 +30,9 @@ build_and_push:
       fi
       if [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]
       then
-       docker build --no-cache --pull -f "${DOCKERFILE:-./Dockerfile}" --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" --build-arg CRUSOE_CSI_DRIVER_NAME="$CRUSOE_CSI_DRIVER_NAME" --build-arg CI_COMMIT_REF_NAME="$RELEASE_VERSION" -t $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}" -t $RELEASE_IMAGE:"${RELEASE_DOCKER_TAG}" .
+       docker build --no-cache --pull -f "${DOCKERFILE:-./Dockerfile}" --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" --build-arg CRUSOE_CSI_DRIVER_NAME="$CRUSOE_CSI_DRIVER_NAME" --build-arg CRUSOE_CSI_DRIVER_VERSION="$RELEASE_VERSION" -t $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}" -t $RELEASE_IMAGE:"${RELEASE_DOCKER_TAG}" .
       else
-       docker build --no-cache --pull -f "${DOCKERFILE:-./Dockerfile}" --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" --build-arg CRUSOE_CSI_DRIVER_NAME="$CRUSOE_CSI_DRIVER_NAME" --build-arg CI_COMMIT_REF_NAME="$CI_COMMIT_REF_NAME" -t $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}" .
+       docker build --no-cache --pull -f "${DOCKERFILE:-./Dockerfile}" --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" --build-arg CRUSOE_CSI_DRIVER_NAME="$CRUSOE_CSI_DRIVER_NAME" --build-arg CRUSOE_CSI_DRIVER_VERSION="$CI_COMMIT_REF_NAME" -t $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}" .
       fi
     - docker push $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}"
     # only push the semver tagged image on commit to master
