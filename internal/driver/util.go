@@ -428,6 +428,7 @@ func parseAndValidateBlockSize(strBlockSize string) (int64, error) {
 
 	return int64(parsedBlockSize), nil
 }
+
 func getCreateDiskRequest(name, capacity, location string,
 	capabilities []*csi.VolumeCapability, optionalParameters map[string]string,
 ) (*crusoeapi.DisksPostRequestV1Alpha5, error) {

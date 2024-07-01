@@ -63,12 +63,14 @@ func (n *NodeServer) RegisterServer(srv *grpc.Server) error {
 	return nil
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (n *NodeServer) NodeStageVolume(_ context.Context,
 	_ *csi.NodeStageVolumeRequest,
 ) (*csi.NodeStageVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (n *NodeServer) NodeUnstageVolume(_ context.Context,
 	_ *csi.NodeUnstageVolumeRequest,
 ) (*csi.NodeUnstageVolumeResponse, error) {
@@ -177,12 +179,14 @@ func (n *NodeServer) NodeUnpublishVolume(_ context.Context,
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (n *NodeServer) NodeGetVolumeStats(_ context.Context,
 	_ *csi.NodeGetVolumeStatsRequest,
 ) (*csi.NodeGetVolumeStatsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
+//nolint:wrapcheck // we want to return gRPC Status errors
 func (n *NodeServer) NodeExpandVolume(_ context.Context,
 	_ *csi.NodeExpandVolumeRequest,
 ) (*csi.NodeExpandVolumeResponse, error) {
