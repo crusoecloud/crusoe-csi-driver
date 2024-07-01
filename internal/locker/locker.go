@@ -16,7 +16,7 @@ func NewLocker() *Locker {
 	}
 }
 
-func (l *Locker) AcquireReadLock(id string) bool {
+func (l *Locker) TryAcquireReadLock(id string) bool {
 	l.mx.Lock()
 	rwLock, ok := l.locks[id]
 	if !ok {
@@ -35,7 +35,7 @@ func (l *Locker) ReleaseReadLock(id string) {
 	}
 }
 
-func (l *Locker) AcquireWriteLock(id string) bool {
+func (l *Locker) TryAcquireWriteLock(id string) bool {
 	l.mx.Lock()
 	rwLock, ok := l.locks[id]
 	if !ok {

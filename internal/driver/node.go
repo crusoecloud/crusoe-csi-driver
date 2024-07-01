@@ -28,7 +28,7 @@ const (
 	VolumeContextDiskTypeKey         = "disk-type"
 	ReadOnlyMountOption              = "ro"
 	newDirPerms                      = 0o755 // this represents: rwxr-xr-x
-	newFilePerms                     = 0o644
+	newFilePerms                     = 0o644 // this represents: rw-r--r--
 )
 
 var errVolumeMissingSerialNumber = errors.New("volume missing serial number context key")
@@ -66,13 +66,13 @@ func (n *NodeServer) RegisterServer(srv *grpc.Server) error {
 func (n *NodeServer) NodeStageVolume(_ context.Context,
 	_ *csi.NodeStageVolumeRequest,
 ) (*csi.NodeStageVolumeResponse, error) {
-	return &csi.NodeStageVolumeResponse{}, nil
+	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
 func (n *NodeServer) NodeUnstageVolume(_ context.Context,
 	_ *csi.NodeUnstageVolumeRequest,
 ) (*csi.NodeUnstageVolumeResponse, error) {
-	return &csi.NodeUnstageVolumeResponse{}, nil
+	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
 func (n *NodeServer) NodePublishVolume(_ context.Context,
@@ -180,13 +180,13 @@ func (n *NodeServer) NodeUnpublishVolume(_ context.Context,
 func (n *NodeServer) NodeGetVolumeStats(_ context.Context,
 	_ *csi.NodeGetVolumeStatsRequest,
 ) (*csi.NodeGetVolumeStatsResponse, error) {
-	return &csi.NodeGetVolumeStatsResponse{}, nil
+	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
 func (n *NodeServer) NodeExpandVolume(_ context.Context,
 	_ *csi.NodeExpandVolumeRequest,
 ) (*csi.NodeExpandVolumeResponse, error) {
-	return &csi.NodeExpandVolumeResponse{}, nil
+	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
 }
 
 func (n *NodeServer) NodeGetCapabilities(_ context.Context,

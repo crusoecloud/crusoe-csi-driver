@@ -29,6 +29,7 @@ const (
 	OpSucceeded         opStatus = "SUCCEEDED"
 	OpInProgress        opStatus = "IN_PROGRESS"
 	OpFailed            opStatus = "FAILED"
+	BlockSizeParam               = "csi.crusoe.ai/block-size"
 )
 
 // apiError models the error format returned by the Crusoe API go client.
@@ -46,7 +47,7 @@ type opResultError struct {
 
 var (
 	errUnableToGetOpRes            = errors.New("failed to get result of operation")
-	errUnsupportedVolumeAccessMode = errors.New("failed to get result of operation")
+	errUnsupportedVolumeAccessMode = errors.New("unsupported access mode for volume")
 	// fallback error presented to the user in unexpected situations.
 	errUnexpected = errors.New("an unexpected error occurred, please try again, and if the problem persists, " +
 		"contact support@crusoecloud.com")
@@ -62,6 +63,7 @@ var (
 	errUnsupportedBlockAccessMode = errors.New("unsupported access mode for block volume")
 	errNoCapabilitiesSpecified    = errors.New("neither block nor mount capability specified")
 	errBlockAndMountSpecified     = errors.New("both block and mount capabilities specified")
+	errInvalidBlockSize           = errors.New("invalid block size specified: must be 512 or 4096")
 
 	//nolint:gochecknoglobals // use this map to determine what capabilities are supported
 	supportedBlockVolumeAccessMode = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
@@ -376,10 +378,10 @@ func getVolumeFromDisk(disk *crusoeapi.DiskV1Alpha5) (*csi.Volume, error) {
 func validateVolumeCapabilities(capabilities []*csi.VolumeCapability) error {
 	for _, capability := range capabilities {
 		if capability.GetBlock() != nil && capability.GetMount() != nil {
-			return errNoCapabilitiesSpecified
+			return errBlockAndMountSpecified
 		}
 		if capability.GetBlock() == nil && capability.GetMount() == nil {
-			return errBlockAndMountSpecified
+			return errNoCapabilitiesSpecified
 		}
 
 		accessMode := capability.GetAccessMode().GetMode()
@@ -407,7 +409,7 @@ func getDiskTypeFromVolumeType(capabilities []*csi.VolumeCapability) string {
 		accessMode := capability.GetAccessMode().GetMode()
 		if _, mountOk := supportedMountVolumeAccessMode[accessMode]; mountOk {
 			return mountVolumeDiskType
-		} else if _, blockOk := supportedMountVolumeAccessMode[accessMode]; blockOk {
+		} else if _, blockOk := supportedBlockVolumeAccessMode[accessMode]; blockOk {
 			return blockVolumeDiskType
 		}
 	}
@@ -415,18 +417,36 @@ func getDiskTypeFromVolumeType(capabilities []*csi.VolumeCapability) string {
 	return ""
 }
 
+func parseAndValidateBlockSize(strBlockSize string) (int64, error) {
+	parsedBlockSize, err := strconv.Atoi(strBlockSize)
+	if err != nil {
+		return 0, fmt.Errorf("invalid block size argument: %w", err)
+	}
+	if parsedBlockSize != 512 && parsedBlockSize != 4096 {
+		return 0, errInvalidBlockSize
+	}
+
+	return int64(parsedBlockSize), nil
+}
 func getCreateDiskRequest(name, capacity, location string,
-	capabilities []*csi.VolumeCapability,
-) *crusoeapi.DisksPostRequestV1Alpha5 {
+	capabilities []*csi.VolumeCapability, optionalParameters map[string]string,
+) (*crusoeapi.DisksPostRequestV1Alpha5, error) {
 	params := &crusoeapi.DisksPostRequestV1Alpha5{
 		Name:     name,
 		Size:     capacity,
 		Location: location,
 	}
+	if blockSize, ok := optionalParameters[BlockSizeParam]; ok {
+		parsedBlockSize, err := parseAndValidateBlockSize(blockSize)
+		if err != nil {
+			return nil, fmt.Errorf("failed to validate block size: %w", err)
+		}
+		params.BlockSize = parsedBlockSize
+	}
 
 	params.Type_ = getDiskTypeFromVolumeType(capabilities)
 
-	return params
+	return params, nil
 }
 
 func verifyExistingDisk(currentDisk *crusoeapi.DiskV1Alpha5, createReq *crusoeapi.DisksPostRequestV1Alpha5) error {
@@ -459,10 +479,6 @@ func parseCapacity(capacityRange *csi.CapacityRange) string {
 	reqCapacity := convertBytesToStorageUnit(reqBytes)
 
 	return reqCapacity
-}
-
-func getInstanceIDFromNodeID(nodeID string) string {
-	return nodeID
 }
 
 func getAttachmentTypeFromVolumeCapability(capability *csi.VolumeCapability) (string, error) {

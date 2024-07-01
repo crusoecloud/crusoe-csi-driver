@@ -22,7 +22,10 @@ var controllerServerCapabilities = []csi.ControllerServiceCapability_RPC_Type{
 
 const diskUnsatisfactoryMsg = "disk does not satisfied the required capability"
 
-var errRPCUnimplemented = errors.New("this RPC is currently not implemented")
+var (
+	errRPCUnimplemented            = errors.New("this RPC is currently not implemented")
+	errExpandVolumeWithSmallerSize = errors.New("disk currently has larger size than expand volume request")
+)
 
 type ControllerServer struct {
 	apiClient *crusoeapi.APIClient
@@ -57,8 +60,14 @@ func (c *ControllerServer) CreateVolume(ctx context.Context,
 	}
 
 	reqCapacity := parseCapacity(request.GetCapacityRange())
-	createReq := getCreateDiskRequest(request.GetName(), reqCapacity, c.driver.GetNodeLocation(), capabilities)
+	createReq, err := getCreateDiskRequest(request.GetName(), reqCapacity, c.driver.GetNodeLocation(),
+		capabilities, request.GetParameters())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments to create volume: %s", err.Error())
+	}
 
+	// we will check if a disk already exists with the specified requirements,
+	// if it does, return the disk that already exists
 	foundDisk, findErr := findDisk(ctx, c.apiClient, c.driver.GetNodeProject(), request.GetName())
 	if findErr != nil {
 		return nil, status.Errorf(codes.FailedPrecondition,
@@ -102,6 +111,18 @@ func (c *ControllerServer) ControllerExpandVolume(ctx context.Context,
 	capacityRange := request.GetCapacityRange()
 
 	reqCapacity := parseCapacity(capacityRange)
+
+	disk, getErr := getDisk(ctx, c.apiClient, c.driver.GetNodeProject(), request.GetVolumeId())
+	if getErr != nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "failed to get validate existing disk: %s",
+			getErr.Error())
+	}
+
+	if disk.Size > reqCapacity {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid expand volume request: %s",
+			errExpandVolumeWithSmallerSize.Error())
+	}
+
 	patchReq := &crusoeapi.DisksPatchRequest{
 		Size: reqCapacity,
 	}
@@ -142,7 +163,7 @@ func (c *ControllerServer) ControllerPublishVolume(ctx context.Context,
 ) (*csi.ControllerPublishVolumeResponse, error) {
 	klog.Infof("Received request to publish volume: %+v", request)
 	diskID := request.GetVolumeId()
-	instanceID := getInstanceIDFromNodeID(request.GetNodeId())
+	instanceID := request.GetNodeId()
 	attachmentMode, err := getAttachmentTypeFromVolumeCapability(request.GetVolumeCapability())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "received unexpected capability: %s", err.Error())
@@ -175,7 +196,7 @@ func (c *ControllerServer) ControllerUnpublishVolume(ctx context.Context,
 ) (*csi.ControllerUnpublishVolumeResponse, error) {
 	klog.Infof("Received request to unpublish volume: %+v", request)
 	diskID := request.GetVolumeId()
-	instanceID := getInstanceIDFromNodeID(request.GetNodeId())
+	instanceID := request.GetNodeId()
 
 	detachReq := &crusoeapi.InstancesDetachDiskPostRequest{
 		DetachDisks: []string{diskID},
@@ -204,6 +225,9 @@ func (c *ControllerServer) ValidateVolumeCapabilities(ctx context.Context,
 	}
 
 	desiredType := getDiskTypeFromVolumeType(capabilities)
+	// as part of the CSI specification, if the set of capabilities is not supported, the Confirmed field of the
+	// response should be empty – when Confirmed is empty, we can optionally include a message for K8s to report
+	// why the capabilities are unsupported
 	if desiredType != disk.Type_ {
 		return &csi.ValidateVolumeCapabilitiesResponse{
 			Message: diskUnsatisfactoryMsg,
