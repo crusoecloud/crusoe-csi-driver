@@ -4,8 +4,8 @@
 replicaCount: 1
 
 image:
-  repository: registry.gitlab.com/crusoeenergy/island/external/crusoe-csi-driver
-  tag: "latest"
+  repository: ghcr.io/crusoecloud/crusoe-csi-driver
+  tag: "main"
 
 driverName: "csi.crusoe.ai"
 

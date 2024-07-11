@@ -21,31 +21,14 @@ build_and_push:
         cd ${SUBPROJECT_REL_PATH}
       fi
     - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
-    # if committing to default branch, use semver version inside image, else use commit ref (branch or tag)
-    - |-
-      if [ ! -z "$DOCKER_TAG_RELEASE_DELIMITER_REPLACEMENT" ]; then
-        RELEASE_DOCKER_TAG=$(echo ${RELEASE_VERSION} | sed "s@/@${DOCKER_TAG_RELEASE_DELIMITER_REPLACEMENT}@g")
-      else
-        RELEASE_DOCKER_TAG=${RELEASE_VERSION##*/}
-      fi
-      if [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]
-      then
-       docker build --no-cache --pull -f "${DOCKERFILE:-./Dockerfile}" --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" --build-arg CRUSOE_CSI_DRIVER_NAME="$CRUSOE_CSI_DRIVER_NAME" --build-arg CRUSOE_CSI_DRIVER_VERSION="$RELEASE_VERSION" -t $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}" -t $RELEASE_IMAGE:"${RELEASE_DOCKER_TAG}" .
-      else
-       docker build --no-cache --pull -f "${DOCKERFILE:-./Dockerfile}" --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" --build-arg CRUSOE_CSI_DRIVER_NAME="$CRUSOE_CSI_DRIVER_NAME" --build-arg CRUSOE_CSI_DRIVER_VERSION="$CI_COMMIT_REF_NAME" -t $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}" .
-      fi
+    # Build an image based on the commit ref, this will be available
+    # internally for testing feature branches and testing pre-release versions
+    - docker build --no-cache --pull -f "${DOCKERFILE:-./Dockerfile}" --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" --build-arg CRUSOE_CSI_DRIVER_NAME="$CRUSOE_CSI_DRIVER_NAME" --build-arg CRUSOE_CSI_DRIVER_VERSION="$CI_COMMIT_REF_NAME" -t $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}" .
     - docker push $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}"
-    # only push the semver tagged image on commit to master
-    - |-
-      if [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]
-      then
-       docker push $RELEASE_IMAGE:"${RELEASE_DOCKER_TAG}"
-      fi
 
 # Remove the tag_semver and pages jobs from merges into main.
-# The tag_semver job will be run using a GitHub action on
-# merges into the release branch, and we will only ever
-# want to tag them using that job.
+# The tag_semver job will be run using a GitHub action instead
+# and new versions will be pushed then.
 tag_semver:
   rules:
     - when: never

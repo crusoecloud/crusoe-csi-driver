@@ -66,15 +66,14 @@ func (c *ControllerServer) CreateVolume(ctx context.Context,
 		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments to create volume: %s", err.Error())
 	}
 
-	// we will check if a disk already exists with the specified requirements,
-	// if it does, return the disk that already exists
+	// We will check if a disk already exists with the provided name
 	foundDisk, findErr := findDisk(ctx, c.apiClient, c.driver.GetNodeProject(), request.GetName())
 	if findErr != nil {
 		return nil, status.Errorf(codes.FailedPrecondition,
 			"failed to validate disk if disk already exists: %s", findErr.Error())
 	}
 	var disk *crusoeapi.DiskV1Alpha5
-	// If disk already exists, make sure that it lines up with what we want
+	// If a disk already exists, make sure that it lines up with what we want
 	if foundDisk != nil {
 		verifyErr := verifyExistingDisk(foundDisk, createReq)
 		if verifyErr != nil {
@@ -97,7 +96,7 @@ func (c *ControllerServer) CreateVolume(ctx context.Context,
 			"failed to convert crusoe disk to csi volume: %s", parseErr.Error())
 	}
 
-	klog.Infof("Successfully created volume with name: %s", request.GetName())
+	klog.Infof("Successfully created volume with name: %s and capacity: %s", request.GetName(), reqCapacity)
 
 	return &csi.CreateVolumeResponse{
 		Volume: volume,
@@ -114,7 +113,7 @@ func (c *ControllerServer) ControllerExpandVolume(ctx context.Context,
 
 	disk, getErr := getDisk(ctx, c.apiClient, c.driver.GetNodeProject(), request.GetVolumeId())
 	if getErr != nil {
-		return nil, status.Errorf(codes.FailedPrecondition, "failed to get validate existing disk: %s",
+		return nil, status.Errorf(codes.FailedPrecondition, "failed to get existing disk: %s",
 			getErr.Error())
 	}
 
@@ -168,8 +167,9 @@ func (c *ControllerServer) ControllerPublishVolume(ctx context.Context,
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "received unexpected capability: %s", err.Error())
 	}
+
 	attachment := crusoeapi.DiskAttachment{
-		AttachmentType: "data",
+		AttachmentType: dataDiskAttachmentType,
 		DiskId:         diskID,
 		Mode:           attachmentMode,
 	}
@@ -180,7 +180,7 @@ func (c *ControllerServer) ControllerPublishVolume(ctx context.Context,
 
 	attachErr := attachDisk(ctx, c.apiClient, c.driver.GetNodeProject(), instanceID, attachReq)
 	if attachErr != nil {
-		return nil, status.Errorf(codes.Internal, "failed to attach disk to vm: %s", attachErr.Error())
+		return nil, status.Errorf(codes.Internal, "failed to attach disk to node: %s", attachErr.Error())
 	}
 
 	klog.Infof("Successfully published volume with ID: %s to node: %s",
