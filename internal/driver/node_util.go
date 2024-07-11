@@ -3,10 +3,11 @@ package driver
 import (
 	"errors"
 	"fmt"
-	"github.com/container-storage-interface/spec/lib/go/csi"
-	"k8s.io/mount-utils"
 	"os"
 	"path/filepath"
+
+	"github.com/container-storage-interface/spec/lib/go/csi"
+	"k8s.io/mount-utils"
 )
 
 func getPersistentSSDDevicePath(serialNumber string) string {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -11,7 +13,6 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/mount-utils"
 	"k8s.io/utils/exec"
-	"os"
 
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 )

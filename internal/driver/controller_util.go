@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/container-storage-interface/spec/lib/go/csi"
 	"strconv"
+
+	"github.com/container-storage-interface/spec/lib/go/csi"
 
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 )
