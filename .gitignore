@@ -1,0 +1,15 @@
+*.jar
+*.swp
+*tmp/
+.idea/
+.DS_Store
+.vscode/*
+aliaslint.so
+coverage.out
+dist/
+gokart_result.json
+golangci-lint.json
+node_modules/
+package*.json
+tests.xml
+coverage.xml

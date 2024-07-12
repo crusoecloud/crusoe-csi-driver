@@ -1,0 +1,38 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: crusoe-csi-driver-sc
+provisioner: csi.crusoe.ai
+parameters:
+  type: pd-standard
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: podpvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: crusoe-csi-driver-sc
+  resources:
+    requests:
+      storage: 10Gi
+  volumeMode: Block
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-server
+spec:
+  containers:
+    - name: web-server
+      image: nginx
+      volumeDevices:
+        - devicePath: /var/lib/www/html
+          name: mypvc
+  volumes:
+    - name: mypvc
+      persistentVolumeClaim:
+        claimName: podpvc
+        readOnly: false
