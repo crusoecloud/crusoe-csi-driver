@@ -1,5 +1,10 @@
 # default = everyone is codeowner
+<<<<<<< Updated upstream
 * @ajeyaraj1
+=======
+* @crusoeenergy/island
+.github/ @azhang1982133
+>>>>>>> Stashed changes
 
 .gitlab/CODEOWNERS @lanwall12 @nitper @bsherrycrusoe @ksosnowski3 @dpattishall
 
