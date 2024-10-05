@@ -1,0 +1,16 @@
+################################################################
+# STEP 2: build a small image and run crusoe-csi-driver binary #
+################################################################
+FROM alpine
+
+ARG CRUSOE_CSI_DRIVER_BINARY_NAME
+
+# Need to get these updates for k8s mount-utils library to work properly
+RUN apk update && \
+    apk add --no-cache e2fsprogs && \
+    apk add --no-cache blkid && \
+    rm -rf /var/cache/apk/*
+
+COPY $CRUSOE_CSI_DRIVER_BINARY_NAME /usr/local/go/bin/crusoe-csi-driver
+
+ENTRYPOINT ["/usr/local/go/bin/crusoe-csi-driver"]
