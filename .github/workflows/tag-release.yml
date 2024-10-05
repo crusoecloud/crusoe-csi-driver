@@ -5,9 +5,6 @@ on:
     branches:
       - main
 
-permissions:
-  contents: write
-
 env:
   CRUSOE_CSI_DRIVER_NAME: csi.crusoe.ai
 
