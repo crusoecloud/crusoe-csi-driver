@@ -5,6 +5,11 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  attestations: write
+  packages: write
+
 env:
   CRUSOE_CSI_DRIVER_NAME: csi.crusoe.ai
 
