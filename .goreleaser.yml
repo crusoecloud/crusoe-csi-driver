@@ -21,14 +21,14 @@ builds:
     binary: '{{ .ProjectName }}'
 dockers:
   - image_templates:
-      - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Version }}-amd64'
+      - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Tag }}-amd64'
     use: buildx
     build_flag_templates:
       - "--pull"
       - "--platform=linux/amd64"
     dockerfile: Dockerfile.goreleaser
   - image_templates:
-      - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Version }}-arm64'
+      - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Tag }}-arm64'
     use: buildx
     build_flag_templates:
       - "--pull"
@@ -36,10 +36,10 @@ dockers:
     dockerfile: Dockerfile.goreleaser
     goarch: arm64
 docker_manifests:
-  - name_template: 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Version }}'
+  - name_template: 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Tag }}'
     image_templates:
-      - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Version }}-amd64'
-      - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Version }}-arm64'
+      - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Tag }}-amd64'
+      - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Tag }}-arm64'
 signs:
   - artifacts: checksum
     args:
