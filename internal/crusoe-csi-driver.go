@@ -104,7 +104,7 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 
 	instanceID, projectID, location, err := driver.GetInstanceID(ctx, apiClient)
 	if err != nil {
-		return fmt.Errorf("failed to get instance id of nodeL %w", err)
+		return fmt.Errorf("failed to get instance id of node: %w", err)
 	}
 
 	crusoeDriver := &driver.Config{
@@ -189,11 +189,7 @@ func parseAndValidateArguments(cmd *cobra.Command) (
 }
 
 func startListener(endpointURL *url.URL) (net.Listener, error) {
-	err := os.Remove(endpointURL.Path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to remove socket file: %w", err)
-	}
-
+	_ = os.Remove(endpointURL.Path)
 	listener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
 	if listenErr != nil {
 		return nil, fmt.Errorf("failed to start listener on provided socket url: %w", listenErr)
