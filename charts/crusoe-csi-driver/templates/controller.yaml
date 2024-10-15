@@ -18,7 +18,9 @@ spec:
       containers:
         - name: crusoe-csi-driver
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          args: ["--services", "controller,identity", "--socket-address", "unix:/csi/csi-controller.sock"]
+          args:
+            - "--services=controller,identity"
+            - "--socket-address=unix:/csi/csi-controller.sock"
           env:
             - name: POD_NAME
               valueFrom:
