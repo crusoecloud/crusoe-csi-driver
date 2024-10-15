@@ -4,18 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
+	"k8s.io/klog/v2"
 	"net"
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
-	"time"
-
-	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
-	"k8s.io/klog/v2"
 
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/config"
@@ -191,27 +188,13 @@ func parseAndValidateArguments(cmd *cobra.Command) (
 }
 
 func startListener(endpointURL *url.URL) (net.Listener, error) {
-	tryCount := 0
-	var listener net.Listener
-	for {
-		tryListener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
-		if listenErr != nil {
-			// if old pods are being terminated, they might not have closed the gRPC server listening on the socket
-			// let's wait and try again
-			if strings.Contains(listenErr.Error(), "bind: address already in use") && tryCount < maxRetries {
-				klog.Infof("Address (%s//%s) already in use, retrying...", endpointURL.Scheme, endpointURL.Path)
-				time.Sleep(retryIntervalSeconds * time.Second)
-				tryCount++
-
-				continue
-			}
-
-			return nil, fmt.Errorf("failed to listen on provided socket: %w", listenErr)
-		}
-		listener = tryListener
-
-		break
+	err := os.Remove(endpointURL.Path)
+	if err != nil {
+		return nil, err
 	}
-
+	listener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
+	if listenErr != nil {
+		return nil, listenErr
+	}
 	return listener, nil
 }
