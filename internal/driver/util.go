@@ -13,7 +13,6 @@ import (
 	"github.com/antihax/optional"
 
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
-	swagger "github.com/crusoecloud/client-go/swagger/v1alpha5"
 )
 
 const (
@@ -45,10 +44,10 @@ var (
 	errInstanceNotFound = errors.New("instance not found")
 )
 
-// UnpackAPIError takes a swagger API error and safely attempts to extract any additional information
+// UnpackAPIError takes a crusoeapi API error and safely attempts to extract any additional information
 // present in the response. The original error is returned unchanged if it cannot be unpacked.
 func UnpackAPIError(original error) error {
-	apiErr := &swagger.GenericSwaggerError{}
+	apiErr := &crusoeapi.GenericSwaggerError{}
 	if ok := errors.As(original, apiErr); !ok {
 		return original
 	}
