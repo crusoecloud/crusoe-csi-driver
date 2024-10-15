@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
-	"k8s.io/klog/v2"
 	"net"
 	"net/url"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
+	"k8s.io/klog/v2"
 
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/config"
@@ -190,11 +191,13 @@ func parseAndValidateArguments(cmd *cobra.Command) (
 func startListener(endpointURL *url.URL) (net.Listener, error) {
 	err := os.Remove(endpointURL.Path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to remove socket file: %w", err)
 	}
+
 	listener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
 	if listenErr != nil {
-		return nil, listenErr
+		return nil, fmt.Errorf("failed to start listener on provided socket url: %w", listenErr)
 	}
+
 	return listener, nil
 }
