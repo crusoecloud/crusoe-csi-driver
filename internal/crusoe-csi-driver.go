@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -99,6 +100,7 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 		return errNoServicesProvided
 	}
 
+	slog.Info(fmt.Sprintf("Starting CRUSOE CSI Driver on endpoint %s with access key %s and secret key %s\n", apiEndpoint, accessKey, secretKey))
 	apiClient := driver.NewAPIClient(apiEndpoint, accessKey, secretKey,
 		fmt.Sprintf("%s/%s", driver.GetVendorName(), driver.GetVendorVersion()))
 
