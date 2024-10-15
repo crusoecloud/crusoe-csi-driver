@@ -15,7 +15,7 @@ spec:
         - name: registry-credentials
       containers:
         - name: crusoe-csi-driver
-          image: "registry.gitlab.com/crusoeenergy/island/external/crusoe-csi-driver:latest"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           args:
             - "--services=node,identity"
             - "--socket-address=unix:/csi/csi-node.sock"
