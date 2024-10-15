@@ -110,7 +110,7 @@ func (n *NodeServer) NodePublishVolume(_ context.Context,
 		err := os.MkdirAll(sourcePath, newDirPerms)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal,
-				fmt.Sprintf("failed to make directory at target path: %s", err.Error()))
+				fmt.Sprintf("failed to make directory at target path %s: %s", sourcePath, err.Error()))
 		}
 		err = n.mounter.Mount(sourcePath, targetPath, fsType, mountOpts)
 		if err != nil {
