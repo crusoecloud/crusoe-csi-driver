@@ -185,11 +185,11 @@ func findInstance(ctx context.Context,
 	}
 
 	projectsResp, projectHTTPResp, err := client.ProjectsApi.ListProjects(ctx, opts)
-
-	defer projectHTTPResp.Body.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to query for projects: %w", err)
 	}
+
+	defer projectHTTPResp.Body.Close()
 
 	for _, project := range projectsResp.Items {
 		listVMOpts := &crusoeapi.VMsApiListInstancesOpts{
