@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/url"
 	"os"
@@ -189,7 +190,12 @@ func parseAndValidateArguments(cmd *cobra.Command) (
 }
 
 func startListener(endpointURL *url.URL) (net.Listener, error) {
-	_ = os.Remove(endpointURL.Path)
+	removeErr := os.Remove(endpointURL.Path)
+	if removeErr != nil {
+		if errors.Is(removeErr, fs.ErrNotExist) {
+			return nil, fmt.Errorf("failed to remove socket file %s: %w", endpointURL.Path, removeErr)
+		}
+	}
 	listener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
 	if listenErr != nil {
 		return nil, fmt.Errorf("failed to start listener on provided socket url: %w", listenErr)
