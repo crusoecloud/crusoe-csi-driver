@@ -12,8 +12,8 @@ import (
 
 	"github.com/antihax/optional"
 
-	swagger "github.com/crusoecloud/client-go/swagger/v1alpha4"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	swagger "github.com/crusoecloud/client-go/swagger/v1alpha5"
 )
 
 const (
