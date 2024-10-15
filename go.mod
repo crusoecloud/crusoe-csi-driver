@@ -5,7 +5,7 @@ go 1.22.0
 require (
 	github.com/antihax/optional v1.0.0
 	github.com/container-storage-interface/spec v1.9.0
-	github.com/crusoecloud/client-go v0.1.47
+	github.com/crusoecloud/client-go v0.1.59
 	github.com/spf13/cobra v1.8.0
 	google.golang.org/grpc v1.57.0
 	k8s.io/klog/v2 v2.120.1
