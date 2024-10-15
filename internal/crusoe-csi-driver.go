@@ -192,7 +192,7 @@ func parseAndValidateArguments(cmd *cobra.Command) (
 func startListener(endpointURL *url.URL) (net.Listener, error) {
 	removeErr := os.Remove(endpointURL.Path)
 	if removeErr != nil {
-		if errors.Is(removeErr, fs.ErrNotExist) {
+		if !errors.Is(removeErr, fs.ErrNotExist) {
 			return nil, fmt.Errorf("failed to remove socket file %s: %w", endpointURL.Path, removeErr)
 		}
 	}
