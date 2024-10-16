@@ -6,7 +6,13 @@ import (
 	"os"
 	"path/filepath"
 
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/mount-utils"
 )
 
@@ -46,6 +52,42 @@ func publishBlockVolume(req *csi.NodePublishVolumeRequest, targetPath string,
 	}
 
 	err = mounter.FormatAndMount(devicePath, targetPath, "", mountOpts)
+	if err != nil {
+		return fmt.Errorf("failed to mount volume at target path: %w", err)
+	}
+
+	return nil
+}
+
+func publishFilesystemVolume(req *csi.NodePublishVolumeRequest, targetPath string,
+	mounter *mount.SafeFormatAndMount, mountOpts []string,
+) error {
+	volumeContext := req.GetVolumeContext()
+	serialNumber, ok := volumeContext[VolumeContextDiskSerialNumberKey]
+	if !ok {
+		return errVolumeMissingSerialNumber
+	}
+
+	devicePath := getPersistentSSDDevicePath(serialNumber)
+	dirPath := filepath.Dir(targetPath)
+	// Check if the directory exists
+	if _, err := os.Stat(dirPath); errors.Is(err, os.ErrNotExist) {
+		// Directory does not exist, create it
+		if mkdirErr := os.MkdirAll(dirPath, newDirPerms); mkdirErr != nil {
+			return fmt.Errorf("failed to make directory for target path: %w", mkdirErr)
+		}
+	}
+
+	volumeCapability := req.GetVolumeCapability()
+	fsType := volumeCapability.GetMount().GetFsType()
+	mountOpts = append(mountOpts, volumeCapability.GetMount().GetMountFlags()...)
+	err := mounter.Mount(devicePath, targetPath, fsType, mountOpts)
+	if err != nil {
+		return status.Errorf(codes.Internal,
+			fmt.Sprintf("failed to mount volume at target path: %s", err.Error()))
+	}
+
+	err = mounter.Mount(devicePath, targetPath, "", mountOpts)
 	if err != nil {
 		return fmt.Errorf("failed to mount volume at target path: %w", err)
 	}

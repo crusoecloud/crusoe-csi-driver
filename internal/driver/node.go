@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -62,18 +60,21 @@ func (n *NodeServer) RegisterServer(srv *grpc.Server) error {
 	return nil
 }
 
-//nolint:wrapcheck // we want to return gRPC Status errors
 func (n *NodeServer) NodeStageVolume(_ context.Context,
-	_ *csi.NodeStageVolumeRequest,
+	req *csi.NodeStageVolumeRequest,
 ) (*csi.NodeStageVolumeResponse, error) {
-	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
+	klog.Infof("Received request to stage volume: %+v", req)
+
+	return &csi.NodeStageVolumeResponse{}, nil
 }
 
 //nolint:wrapcheck // we want to return gRPC Status errors
 func (n *NodeServer) NodeUnstageVolume(_ context.Context,
-	_ *csi.NodeUnstageVolumeRequest,
+	req *csi.NodeUnstageVolumeRequest,
 ) (*csi.NodeUnstageVolumeResponse, error) {
-	return nil, status.Error(codes.Unimplemented, errRPCUnimplemented.Error())
+	klog.Infof("Received request to unstage volume: %+v", req)
+
+	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
 func (n *NodeServer) NodePublishVolume(_ context.Context,
@@ -81,7 +82,6 @@ func (n *NodeServer) NodePublishVolume(_ context.Context,
 ) (*csi.NodePublishVolumeResponse, error) {
 	klog.Infof("Received request to publish volume: %+v", req)
 	targetPath := req.GetTargetPath()
-	stagingTargetPath := req.GetStagingTargetPath()
 	readOnly := req.GetReadonly()
 
 	volumeCapability := req.GetVolumeCapability()
@@ -100,22 +100,12 @@ func (n *NodeServer) NodePublishVolume(_ context.Context,
 	if volumeCapability.GetBlock() != nil {
 		mountErr := publishBlockVolume(req, targetPath, n.mounter, mountOpts)
 		if mountErr != nil {
-			return nil, status.Errorf(codes.Internal, "failed to mount volume: %s", mountErr.Error())
+			return nil, status.Errorf(codes.Internal, "failed to mount block volume: %s", mountErr.Error())
 		}
 	} else if volumeCapability.GetMount() != nil {
-		var sourcePath string
-		fsType := volumeCapability.GetMount().GetFsType()
-		sourcePath = stagingTargetPath
-		mountOpts = append(mountOpts, volumeCapability.GetMount().GetMountFlags()...)
-		err := os.MkdirAll(sourcePath, newDirPerms)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal,
-				fmt.Sprintf("failed to make directory at target path %s: %s", sourcePath, err.Error()))
-		}
-		err = n.mounter.Mount(sourcePath, targetPath, fsType, mountOpts)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal,
-				fmt.Sprintf("failed to mount volume at target path: %s", err.Error()))
+		mountErr := publishFilesystemVolume(req, targetPath, n.mounter, mountOpts)
+		if mountErr != nil {
+			return nil, status.Errorf(codes.Internal, "failed to mount filesystem volume: %s", mountErr.Error())
 		}
 	}
 
