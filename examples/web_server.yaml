@@ -18,7 +18,7 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  volumeMode: Block
+  volumeMode: Filesystem
 ---
 apiVersion: v1
 kind: Pod
@@ -28,8 +28,8 @@ spec:
   containers:
     - name: web-server
       image: nginx
-      volumeDevices:
-        - devicePath: /var/lib/www/html
+      volumeMounts:
+        - mountPath: /var/lib/www/html
           name: mypvc
   volumes:
     - name: mypvc

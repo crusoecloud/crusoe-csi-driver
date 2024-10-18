@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc"
@@ -81,12 +80,12 @@ func (n *NodeServer) NodePublishVolume(_ context.Context,
 ) (*csi.NodePublishVolumeResponse, error) {
 	klog.Infof("Received request to publish volume: %+v", req)
 	targetPath := req.GetTargetPath()
-	stagingTargetPath := req.GetStagingTargetPath()
 	readOnly := req.GetReadonly()
 
 	volumeCapability := req.GetVolumeCapability()
 
-	mountOpts := []string{"bind"}
+	var mountOpts []string
+
 	if readOnly {
 		mountOpts = append(mountOpts, ReadOnlyMountOption)
 	}
@@ -100,22 +99,12 @@ func (n *NodeServer) NodePublishVolume(_ context.Context,
 	if volumeCapability.GetBlock() != nil {
 		mountErr := publishBlockVolume(req, targetPath, n.mounter, mountOpts)
 		if mountErr != nil {
-			return nil, status.Errorf(codes.Internal, "failed to mount volume: %s", mountErr.Error())
+			return nil, status.Errorf(codes.Internal, "failed to mount block volume: %s", mountErr.Error())
 		}
 	} else if volumeCapability.GetMount() != nil {
-		var sourcePath string
-		fsType := volumeCapability.GetMount().GetFsType()
-		sourcePath = stagingTargetPath
-		mountOpts = append(mountOpts, volumeCapability.GetMount().GetMountFlags()...)
-		err := os.MkdirAll(sourcePath, newDirPerms)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal,
-				fmt.Sprintf("failed to make directory at target path: %s", err.Error()))
-		}
-		err = n.mounter.Mount(sourcePath, targetPath, fsType, mountOpts)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal,
-				fmt.Sprintf("failed to mount volume at target path: %s", err.Error()))
+		mountErr := publishFilesystemVolume(req, targetPath, n.mounter, mountOpts)
+		if mountErr != nil {
+			return nil, status.Errorf(codes.Internal, "failed to mount filesystem volume: %s", mountErr.Error())
 		}
 	}
 

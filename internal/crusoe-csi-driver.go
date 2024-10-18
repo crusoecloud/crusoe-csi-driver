@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -106,7 +105,7 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 
 	instanceID, projectID, location, err := driver.GetInstanceID(ctx, apiClient)
 	if err != nil {
-		return fmt.Errorf("failed to get instance id of nodeL %w", err)
+		return fmt.Errorf("failed to get instance id of node: %w", err)
 	}
 
 	crusoeDriver := &driver.Config{
@@ -191,26 +190,15 @@ func parseAndValidateArguments(cmd *cobra.Command) (
 }
 
 func startListener(endpointURL *url.URL) (net.Listener, error) {
-	tryCount := 0
-	var listener net.Listener
-	for {
-		tryListener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
-		if listenErr != nil {
-			// if old pods are being terminated, they might not have closed the gRPC server listening on the socket
-			// let's wait and try again
-			if strings.Contains(listenErr.Error(), "bind: address already in use") && tryCount < maxRetries {
-				klog.Infof("Address (%s//%s) already in use, retrying...", endpointURL.Scheme, endpointURL.Path)
-				time.Sleep(retryIntervalSeconds * time.Second)
-				tryCount++
-
-				continue
-			}
-
-			return nil, fmt.Errorf("failed to listen on provided socket: %w", listenErr)
+	removeErr := os.Remove(endpointURL.Path)
+	if removeErr != nil {
+		if !errors.Is(removeErr, fs.ErrNotExist) {
+			return nil, fmt.Errorf("failed to remove socket file %s: %w", endpointURL.Path, removeErr)
 		}
-		listener = tryListener
-
-		break
+	}
+	listener, listenErr := net.Listen(endpointURL.Scheme, endpointURL.Path)
+	if listenErr != nil {
+		return nil, fmt.Errorf("failed to start listener on provided socket url: %w", listenErr)
 	}
 
 	return listener, nil

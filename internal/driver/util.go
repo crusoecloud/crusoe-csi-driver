@@ -12,7 +12,6 @@ import (
 
 	"github.com/antihax/optional"
 
-	swagger "github.com/crusoecloud/client-go/swagger/v1alpha4"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 )
 
@@ -45,10 +44,10 @@ var (
 	errInstanceNotFound = errors.New("instance not found")
 )
 
-// UnpackAPIError takes a swagger API error and safely attempts to extract any additional information
+// UnpackAPIError takes a crusoeapi API error and safely attempts to extract any additional information
 // present in the response. The original error is returned unchanged if it cannot be unpacked.
 func UnpackAPIError(original error) error {
-	apiErr := &swagger.GenericSwaggerError{}
+	apiErr := &crusoeapi.GenericSwaggerError{}
 	if ok := errors.As(original, apiErr); !ok {
 		return original
 	}
@@ -185,11 +184,11 @@ func findInstance(ctx context.Context,
 	}
 
 	projectsResp, projectHTTPResp, err := client.ProjectsApi.ListProjects(ctx, opts)
-
-	defer projectHTTPResp.Body.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to query for projects: %w", err)
 	}
+
+	defer projectHTTPResp.Body.Close()
 
 	for _, project := range projectsResp.Items {
 		listVMOpts := &crusoeapi.VMsApiListInstancesOpts{
