@@ -14,24 +14,20 @@ the [Crusoe Cloud RKE2 solution](https://github.com/crusoecloud/crusoe-ml-rke2) 
 
 As the CSI Driver will communicate with the Crusoe Cloud API to orchestrate storage operations, you will have to set up
 credentials in your Kubernetes cluster which the driver can then use to communicate with the API. Here is a `.yaml` file 
-which can be modified with your credentials and applied to your cluster (using `kubectl apply -f credentials.yaml`).
+which can be modified with your credentials and applied to your cluster (using `kubectl apply -f credentials.yaml -n $CRUSOE_CSI_NAMESPACE`).
+
+By default, the driver will use the `crusoe-api-keys` secret.
 
 ```yaml
 apiVersion: v1
 data:
-  crusoe-csi-accesskey: <base-64 encoded Crusoe Token Access Key>
+  CRUSOE_CSI_ACCESS_KEY: <base-64 encoded Crusoe Access Key>
+  CRUSOE_CSI_SECRET_KEY: <base-64 encoded Crusoe Secret Key>
 kind: Secret
-type: Opaque
 metadata:
-  name: crusoe-csi-accesskey
----
-apiVersion: v1
-data:
-  crusoe-csi-secretkey: <base-64 encoded Crusoe Token Secret Key>
-kind: Secret
-type: Opaque
-metadata:
-  name: crusoe-csi-secretkey
+  name: crusoe-api-keys
+  namespace: crusoe-csi-driver
+
 ```
 
 ### Installing the Driver
