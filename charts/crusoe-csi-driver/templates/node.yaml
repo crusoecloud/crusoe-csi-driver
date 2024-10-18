@@ -30,10 +30,7 @@ spec:
                   fieldPath: spec.nodeName
           envFrom:
             - secretRef:
-                name: crusoe-csi-accesskey
-                optional: false
-            - secretRef:
-                name: crusoe-csi-secretkey
+                name: {{.Values.secrets.crusoe_api_keys.secretName}}
                 optional: false
           volumeMounts:
             - name: socket-dir
@@ -45,6 +42,10 @@ spec:
               mountPath: /dev
           securityContext:
             privileged: true
+          {{- with .Values.node.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
         - name: csi-driver-registrar
           image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.9.0
           args:

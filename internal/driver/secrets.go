@@ -7,9 +7,9 @@ import (
 
 const (
 	SecretPath    = "/etc/secrets"
-	AccessKeyName = "crusoe-csi-accesskey"
+	AccessKeyName = "CRUSOE_CSI_ACCESS_KEY"
 	//nolint:gosec // we are not hardcoding credentials, just the env var to get them
-	SecretKeyName = "crusoe-csi-secretkey"
+	SecretKeyName = "CRUSOE_CSI_SECRET_KEY"
 )
 
 // Kubernetes provides two main ways of injecting secrets into pods:
