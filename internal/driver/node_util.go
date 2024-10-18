@@ -48,7 +48,7 @@ func publishBlockVolume(req *csi.NodePublishVolumeRequest, targetPath string,
 	}
 
 	mountOpts = append(mountOpts, "bind")
-	err = mounter.FormatAndMount(devicePath, targetPath, "", mountOpts)
+	err = mounter.Mount(devicePath, targetPath, "", mountOpts)
 	if err != nil {
 		return fmt.Errorf("failed to mount volume at target path: %w", err)
 	}
