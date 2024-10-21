@@ -1,8 +1,9 @@
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
 metadata:
-  name: {{.Release.Name }}-node
+  name: {{.Release.Name }}-controller
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: {{.Release.Name }}
@@ -11,14 +12,18 @@ spec:
       labels:
         app: {{.Release.Name }}
     spec:
+      {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
-        - name: registry-credentials
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ .Release.Name }}-controller-sa
       containers:
         - name: crusoe-csi-driver
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
           args:
-            - "--services=node,identity"
-            - "--socket-address=unix:/csi/csi-node.sock"
+            - "--services=controller,identity"
+            - "--socket-address=unix:/csi/csi-controller.sock"
           env:
             - name: POD_NAME
               valueFrom:
@@ -38,30 +43,41 @@ spec:
             - name: mountpoint-dir
               mountPath: /var/lib/kubelet
               mountPropagation: "Bidirectional"
-            - name: device-dir
-              mountPath: /dev
           securityContext:
             privileged: true
-          {{- with .Values.node.resources }}
+          {{- with .Values.controller.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-        - name: csi-driver-registrar
-          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.9.0
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v4.4.0
           args:
             - "--v=5"
-            - "--csi-address=/csi/csi-node.sock"
-            - "--kubelet-registration-path=/var/lib/kubelet/plugins/{{.Release.Name }}/csi-node.sock"
-          env:
-            - name: KUBE_NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
+            - "--csi-address=/csi/csi-controller.sock"
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
-            - name: registration-dir
-              mountPath: /registration
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v3.6.0
+          args:
+            - "--v=5"
+            - "--csi-address=/csi/csi-controller.sock"
+            - "--feature-gates=Topology=true"
+            - "--extra-create-metadata"
+            - "--default-fstype=ext4"
+            - "--controller-publish-readonly=true"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-resizer
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.9.0
+          args:
+            - "--v=5"
+            - "--csi-address=/csi/csi-controller.sock"
+            - "--handle-volume-inuse-error=false"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
       volumes:
         # This volume is where the socket for kubelet->driver communication is done
         - name: socket-dir
@@ -72,15 +88,4 @@ spec:
         - name: mountpoint-dir
           hostPath:
             path: /var/lib/kubelet
-            type: Directory
-          # This volume is where the node-driver-registrar registers the plugin
-          # with kubelet
-        - name: registration-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins_registry
-            type: Directory
-          # This volume is where devices are located on the underlying instance
-        - name: device-dir
-          hostPath:
-            path: /dev
             type: Directory
