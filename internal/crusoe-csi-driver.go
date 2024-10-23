@@ -14,6 +14,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
@@ -84,7 +86,7 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 
 	srv := grpc.NewServer()
 
-	grpcServers := []service{}
+	var grpcServers []service
 	for _, grpcSrvc := range requestedServices {
 		switch grpcSrvc {
 		case driver.ControllerService:
@@ -103,10 +105,21 @@ func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	apiClient := driver.NewAPIClient(apiEndpoint, accessKey, secretKey,
 		fmt.Sprintf("%s/%s", driver.GetVendorName(), driver.GetVendorVersion()))
 
-	instanceID, projectID, location, err := driver.GetInstanceID(ctx, apiClient)
+	kubeClientConfig, err := rest.InClusterConfig()
+	if err != nil {
+		return fmt.Errorf("could not get kube client config: %w", err)
+	}
+
+	kubeClient, err := kubernetes.NewForConfig(kubeClientConfig)
+	if err != nil {
+		return fmt.Errorf("could not get kube client: %w", err)
+	}
+
+	instanceID, projectID, location, err := driver.GetInstanceInfo(ctx, apiClient, kubeClient)
 	if err != nil {
 		return fmt.Errorf("failed to get instance id of node: %w", err)
 	}
+	klog.Infof("Found instance id of node: %s", instanceID)
 
 	crusoeDriver := &driver.Config{
 		VendorName:    driver.GetVendorName(),

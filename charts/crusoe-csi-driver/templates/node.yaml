@@ -13,9 +13,11 @@ spec:
     spec:
       imagePullSecrets:
         - name: registry-credentials
+      serviceAccountName: crusoe-csi-driver-node-sa
       containers:
         - name: crusoe-csi-driver
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: Always
           args:
             - "--services=node,identity"
             - "--socket-address=unix:/csi/csi-node.sock"
@@ -28,9 +30,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            {{- with .Values.crusoe.projectID }}
+            - name: CRUSOE_PROJECT_ID
+              value: {{ . }}
+            {{- end }}
           envFrom:
             - secretRef:
-                name: {{.Values.secrets.crusoe_api_keys.secretName}}
+                name: {{.Values.secrets.crusoeApiKeys.secretName}}
                 optional: false
           volumeMounts:
             - name: socket-dir

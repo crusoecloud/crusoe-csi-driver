@@ -11,15 +11,22 @@ import (
 	"time"
 
 	"github.com/antihax/optional"
+	"github.com/google/uuid"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 )
 
 const (
-	pollInterval          = 2 * time.Second
-	OpSucceeded  opStatus = "SUCCEEDED"
-	OpInProgress opStatus = "IN_PROGRESS"
-	OpFailed     opStatus = "FAILED"
+	pollInterval               = 2 * time.Second
+	OpSucceeded       opStatus = "SUCCEEDED"
+	OpInProgress      opStatus = "IN_PROGRESS"
+	OpFailed          opStatus = "FAILED"
+	nodeNameEnvKey             = "NODE_NAME"
+	projectIDEnvKey            = "CRUSOE_PROJECT_ID"
+	projectIDLabelKey          = "crusoe.ai/project.id"
 )
 
 // apiError models the error format returned by the Crusoe API go client.
@@ -40,8 +47,10 @@ var (
 	// fallback error presented to the user in unexpected situations.
 	errUnexpected = errors.New("an unexpected error occurred, please try again, and if the problem persists, " +
 		"contact support@crusoecloud.com")
-	errBadFQDN          = errors.New("fqdn in unexpected format")
-	errInstanceNotFound = errors.New("instance not found")
+	errInstanceNotFound     = errors.New("instance not found")
+	errNodeNameEnvVarNotSet = fmt.Errorf("env var %s not set", nodeNameEnvKey)
+	errProjectIDNotFound    = fmt.Errorf("project ID not found in %s env var or %s node label",
+		projectIDEnvKey, projectIDLabelKey)
 )
 
 // UnpackAPIError takes a crusoeapi API error and safely attempts to extract any additional information
@@ -152,28 +161,115 @@ func awaitOperationAndResolve[T any](ctx context.Context, op *crusoeapi.Operatio
 	return result, op, nil
 }
 
-func GetInstanceID(ctx context.Context, client *crusoeapi.APIClient) (
+func getProjectID(ctx context.Context, kubeClient *kubernetes.Clientset, nodeName string) (string, error) {
+	projectIDFromEnv := os.Getenv(projectIDEnvKey)
+
+	if projectIDFromEnv != "" {
+		_, err := uuid.Parse(projectIDFromEnv)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse project ID from env var: %w", err)
+		}
+
+		return projectIDFromEnv, nil
+	}
+
+	node, err := kubeClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("could not fetch current node with kube client: %w", err)
+	}
+
+	projectIDFromNodeLabels, ok := node.Labels[projectIDLabelKey]
+	if !ok {
+		return "", errProjectIDNotFound
+	}
+
+	return projectIDFromNodeLabels, nil
+}
+
+func getInstanceInfoWithProjectID(ctx context.Context,
+	client *crusoeapi.APIClient,
+	kubeClient *kubernetes.Clientset,
+	nodeName string) (
 	instanceID string,
 	projectID string,
 	location string,
 	err error,
 ) {
-	// FQDN is of the form: <vm-name>.<location>.compute.internal
-	fqdn := GetNodeFQDN()
-
-	fqdnSlice := strings.Split(fqdn, ".")
-	if len(fqdnSlice) < 1 {
-		return "", "", "", errBadFQDN
+	projectID, err = getProjectID(ctx, kubeClient, nodeName)
+	if err != nil {
+		return "", "", "", err
 	}
 
-	vmName := fqdnSlice[0]
-
-	instance, err := findInstance(ctx, client, vmName)
+	instance, err := findInstanceInProject(ctx, client, projectID, nodeName)
 	if err != nil {
-		return "", "", "", fmt.Errorf("could not find instance (%s): %w", vmName, err)
+		return "", "", "", err
 	}
 
 	return instance.Id, instance.ProjectId, instance.Location, nil
+}
+
+func getInstanceInfoFallback(ctx context.Context, client *crusoeapi.APIClient, nodeName string) (
+	instanceID string,
+	projectID string,
+	location string,
+	err error,
+) {
+	instance, err := findInstance(ctx, client, nodeName)
+	if err != nil {
+		return "", "", "", fmt.Errorf("could not find instance with name '%s': %w", nodeName, err)
+	}
+
+	return instance.Id, instance.ProjectId, instance.Location, nil
+}
+
+func GetInstanceInfo(ctx context.Context, client *crusoeapi.APIClient, kubeClient *kubernetes.Clientset) (
+	instanceID string,
+	projectID string,
+	location string,
+	err error,
+) {
+	nodeName := os.Getenv(nodeNameEnvKey)
+	if nodeName == "" {
+		return "", "", "", errNodeNameEnvVarNotSet
+	}
+
+	instanceID, projectID, location, err = getInstanceInfoWithProjectID(ctx, client, kubeClient, nodeName)
+	if err != nil {
+		klog.Warningf("failed to get instance id of node with project ID: %s", err)
+		klog.Info("Attempting fallback method")
+	} else {
+		// No error, return
+		return instanceID, projectID, location, nil
+	}
+
+	// Fall back to getInstanceInfoFallback
+	instanceID, projectID, location, err = getInstanceInfoFallback(ctx, client, nodeName)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	return instanceID, projectID, location, nil
+}
+
+func findInstanceInProject(ctx context.Context,
+	client *crusoeapi.APIClient,
+	projectID string,
+	instanceName string,
+) (*crusoeapi.InstanceV1Alpha5, error) {
+	listVMOpts := &crusoeapi.VMsApiListInstancesOpts{
+		Names: optional.NewString(instanceName),
+	}
+	instances, instancesHTTPResp, instancesErr := client.VMsApi.ListInstances(ctx, projectID, listVMOpts)
+	if instancesErr != nil {
+		return nil, fmt.Errorf("failed to list instances: %w", instancesErr)
+	}
+	instancesHTTPResp.Body.Close()
+
+	if len(instances.Items) == 0 {
+		return nil, errInstanceNotFound
+	}
+
+	return &instances.Items[0], nil
 }
 
 func findInstance(ctx context.Context,

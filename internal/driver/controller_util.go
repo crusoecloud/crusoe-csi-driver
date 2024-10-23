@@ -41,13 +41,10 @@ var (
 	supportedBlockVolumeAccessMode = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER:        {},
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY:   {},
-		csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY:    {},
-		csi.VolumeCapability_AccessMode_MULTI_NODE_SINGLE_WRITER:  {},
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_SINGLE_WRITER: {},
 	}
 	//nolint:gochecknoglobals // use this map to determine what capabilities are supported
 	supportedMountVolumeAccessMode = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
-		csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER:  {},
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_MULTI_WRITER: {},
 	}
 )
@@ -268,17 +265,9 @@ func validateVolumeCapabilities(capabilities []*csi.VolumeCapability) error {
 	return nil
 }
 
-func getDiskTypeFromVolumeType(capabilities []*csi.VolumeCapability) string {
-	for _, capability := range capabilities {
-		accessMode := capability.GetAccessMode().GetMode()
-		if _, mountOk := supportedMountVolumeAccessMode[accessMode]; mountOk {
-			return mountVolumeDiskType
-		} else if _, blockOk := supportedBlockVolumeAccessMode[accessMode]; blockOk {
-			return blockVolumeDiskType
-		}
-	}
-
-	return ""
+func getDiskTypeFromVolumeType(_ []*csi.VolumeCapability) string {
+	// TODO: support shared filesystem volumes
+	return blockVolumeDiskType
 }
 
 func parseAndValidateBlockSize(strBlockSize string) (int64, error) {
