@@ -37,7 +37,7 @@ func publishBlockVolume(req *csi.NodePublishVolumeRequest, targetPath string,
 	}
 
 	// expose the block volume as a file
-	f, err := os.OpenFile(targetPath, os.O_CREATE, os.FileMode(newFilePerms))
+	f, err := os.OpenFile(targetPath, os.O_CREATE|os.O_EXCL, os.FileMode(newFilePerms))
 	if err != nil {
 		if !os.IsExist(err) {
 			return fmt.Errorf("failed to make file for target path: %w", err)

@@ -44,7 +44,7 @@ type service interface {
 
 // RunDriver starts up and runs the Crusoe Cloud CSI Driver.
 //
-//nolint:funlen,cyclop // a lot statements here because all set up is done here, already factored
+//nolint:funlen,cyclop // a lot of statements here because all set up is done here, already factored
 func RunDriver(cmd *cobra.Command, _ /*args*/ []string) error {
 	// Listen for interrupt signals.
 	interrupt := make(chan os.Signal, 1)
