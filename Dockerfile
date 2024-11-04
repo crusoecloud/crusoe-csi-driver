@@ -2,7 +2,7 @@
 # STEP 1: build crusoe-csi-driver binary #
 ##########################################
 
-FROM golang:1.22 as builder
+FROM golang:1.22 AS builder
 
 ARG CRUSOE_CSI_DRIVER_NAME
 ENV CRUSOE_CSI_DRIVER_NAME=$CRUSOE_CSI_DRIVER_NAME
@@ -19,6 +19,7 @@ RUN make cross
 ################################################################
 FROM alpine
 
+
 # Need to get these updates for k8s mount-utils library to work properly
 RUN apk update && \
     apk add --no-cache e2fsprogs && \
@@ -26,5 +27,7 @@ RUN apk update && \
     rm -rf /var/cache/apk/*
 
 COPY --from=builder /build/dist/crusoe-csi-driver /usr/local/go/bin/crusoe-csi-driver
+
+USER 1000
 
 ENTRYPOINT ["/usr/local/go/bin/crusoe-csi-driver"]
