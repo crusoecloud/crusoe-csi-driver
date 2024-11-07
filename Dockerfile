@@ -2,7 +2,7 @@
 # STEP 1: build crusoe-csi-driver binary #
 ##########################################
 
-FROM golang:1.22 as builder
+FROM golang:1.22.9 AS builder
 
 ARG CRUSOE_CSI_DRIVER_NAME
 ENV CRUSOE_CSI_DRIVER_NAME=$CRUSOE_CSI_DRIVER_NAME
