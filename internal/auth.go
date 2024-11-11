@@ -1,4 +1,4 @@
-package driver
+package internal
 
 import (
 	"crypto/hmac"
@@ -182,8 +182,8 @@ func encodeQuery(values map[string][]string) string {
 	return buf.String()
 }
 
-// NewAPIClient initializes a new Crusoe API client with the given configuration.
-func NewAPIClient(host, key, secret, userAgent string) *crusoeapi.APIClient {
+// NewCrusoeClient initializes a new Crusoe API client with the given configuration.
+func NewCrusoeClient(host, key, secret, userAgent string) *crusoeapi.APIClient {
 	cfg := crusoeapi.NewConfiguration()
 	cfg.UserAgent = userAgent
 	cfg.BasePath = host
