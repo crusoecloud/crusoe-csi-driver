@@ -1,4 +1,4 @@
-package driver
+package crusoe
 
 import (
 	"crypto/hmac"
@@ -18,9 +18,9 @@ import (
 // AuthenticatingTransport is a struct implementing http.Roundtripper
 // that authenticates a request to Crusoe Cloud before sending it out.
 type AuthenticatingTransport struct {
+	http.RoundTripper
 	keyID     string
 	secretKey string
-	http.RoundTripper
 }
 
 func NewAuthenticatingTransport(r http.RoundTripper, keyID, secretKey string) AuthenticatingTransport {
@@ -182,8 +182,8 @@ func encodeQuery(values map[string][]string) string {
 	return buf.String()
 }
 
-// NewAPIClient initializes a new Crusoe API client with the given configuration.
-func NewAPIClient(host, key, secret, userAgent string) *crusoeapi.APIClient {
+// NewCrusoeClient initializes a new Crusoe API client with the given configuration.
+func NewCrusoeClient(host, key, secret, userAgent string) *crusoeapi.APIClient {
 	cfg := crusoeapi.NewConfiguration()
 	cfg.UserAgent = userAgent
 	cfg.BasePath = host

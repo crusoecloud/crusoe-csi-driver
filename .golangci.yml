@@ -9,7 +9,7 @@ linters-settings:
     # default is false: such cases aren't reported by default.
     check-blank: true
   govet:
-    check-shadowing: true
+    enable-all: true
   gci:
     sections:
       - standard
@@ -26,9 +26,6 @@ linters-settings:
       - commentedOutCode
   whitespace:
     multi-if: true # Enforces newlines (or comments) after every multi-line if statement
-  gosec:
-    global:
-      audit: enabled # Run extra checks that might be "nosy"
   gomoddirectives:
     replace-allow-list:
       - github.com/crusoecloud/client-go
@@ -37,19 +34,18 @@ linters:
   disable-all: true
   enable:
     - asciicheck
-    - bodyclose
+    - copyloopvar
     - cyclop
     - dogsled
     - dupl
     - durationcheck
+    - err113
     - errcheck
     - errorlint
     - exhaustive
-    - exportloopref
     - forbidigo
     - forcetypeassert
     - funlen
-    - gci
     - gochecknoinits
     - gochecknoglobals
     - gocognit
@@ -57,12 +53,9 @@ linters:
     - gocritic
     - gocyclo
     - godot
-    - goerr113
-    - gofmt
     - gofumpt
     - goheader
     - goimports
-    - gomnd
     - gomoddirectives
     - gomodguard
     - goprintffuncname
@@ -73,6 +66,7 @@ linters:
     - lll
     - makezero
     - misspell
+    - mnd
     - nakedret
     - nestif
     - nilerr
@@ -114,5 +108,3 @@ run:
 
 # golangci.com configuration
 # https://github.com/golangci/golangci/wiki/Configuration
-service:
-  golangci-lint-version: 1.50.1 # use a fixed version for consistent results
