@@ -23,6 +23,8 @@ RUN make cross
 ################################################################
 # STEP 2: build a small image and run crusoe-csi-driver binary #
 ################################################################
+
+# Dockerfile.goreleaser should be kept roughly in sync
 FROM alpine:3.20.3
 
 # Need to get these updates for k8s mount-utils library to work properly
