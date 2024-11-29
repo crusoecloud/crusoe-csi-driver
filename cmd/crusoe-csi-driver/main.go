@@ -36,10 +36,10 @@ func setFlags() {
 	replacer := strings.NewReplacer("-", "_")
 	viper.SetEnvKeyReplacer(replacer)
 
-	rootCmd.Flags().String(internal.CrusoeAPIEndpointFlag, internal.CrusoeAPIEndpointDefault, "help for api endpoint")
-	rootCmd.Flags().String(internal.CrusoeAccessKeyFlag, "", "help for access key")
-	rootCmd.Flags().String(internal.CrusoeSecretKeyFlag, "", "help for secret key")
-	rootCmd.Flags().String(internal.CrusoeProjectIDFlag, "", "help for project id")
+	rootCmd.Flags().String(internal.CrusoeAPIEndpointFlag, internal.CrusoeAPIEndpointDefault, "Crusoe API endpoint")
+	rootCmd.Flags().String(internal.CrusoeAccessKeyFlag, "", "Crusoe Access Key")
+	rootCmd.Flags().String(internal.CrusoeSecretKeyFlag, "", "Crusoe Secret Key")
+	rootCmd.Flags().String(internal.CrusoeProjectIDFlag, "", "Cluster Project ID")
 	rootCmd.Flags().Var(
 		enumflag.New(&internal.SelectedCSIDriverType,
 			internal.CSIDriverTypeFlag,
@@ -54,8 +54,8 @@ func setFlags() {
 			true),
 		internal.ServicesFlag,
 		"help for services")
-	rootCmd.Flags().String(internal.NodeNameFlag, "", "help for kubernetes node name")
-	rootCmd.Flags().String(internal.SocketAddressFlag, internal.SocketAddressDefault, "help for socket address")
+	rootCmd.Flags().String(internal.NodeNameFlag, "", "Kubernetes Node Name")
+	rootCmd.Flags().String(internal.SocketAddressFlag, internal.SocketAddressDefault, "CSI Socket Address")
 
 	err = viper.BindPFlags(rootCmd.Flags())
 	if err != nil {
