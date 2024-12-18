@@ -9,9 +9,10 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/google/uuid"
 
 	"github.com/crusoecloud/crusoe-csi-driver/internal/controller"
 
@@ -42,15 +43,16 @@ const (
 	projectIDEnvKey   = "CRUSOE_PROJECT_ID"
 	projectIDLabelKey = "crusoe.ai/project.id"
 
-	numExpectedComponents = 2
+	vmIDFilePath = "/sys/class/dmi/id/product_uuid"
 )
 
 var (
 	errInstanceNotFound  = errors.New("instance not found")
 	errMultipleInstances = errors.New("multiple instances found")
+	errVMIDReadFailed    = fmt.Errorf("failed to read %s for VM ID", vmIDFilePath)
+	errVMIDParseFailed   = fmt.Errorf("failed to parse %s for VM ID", vmIDFilePath)
 	errProjectIDNotFound = fmt.Errorf("project ID not found in %s env var or %s node label",
 		projectIDEnvKey, projectIDLabelKey)
-	errInvalidNodeName = errors.New("invalid node name")
 )
 
 func interruptHandler() (*sync.WaitGroup, context.Context) {
@@ -76,6 +78,7 @@ func interruptHandler() (*sync.WaitGroup, context.Context) {
 	return &wg, ctx
 }
 
+//nolint:cyclop // function is already fairly clean
 func getHostInstance(ctx context.Context) (*crusoeapi.InstanceV1Alpha5, error) {
 	crusoeClient := crusoe.NewCrusoeClient(
 		viper.GetString(CrusoeAPIEndpointFlag),
@@ -84,28 +87,32 @@ func getHostInstance(ctx context.Context) (*crusoeapi.InstanceV1Alpha5, error) {
 		"crusoe-csi-driver/0.0.1",
 	)
 
-	fullNodeName := viper.GetString(NodeNameFlag)
-	nodeNameSplit := strings.SplitN(fullNodeName, ".", numExpectedComponents)
-	if len(nodeNameSplit) < 1 {
-		return nil, errInvalidNodeName
+	vmIDStringByteArray, err := os.ReadFile(vmIDFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errVMIDReadFailed, err)
 	}
-	shortNodeName := nodeNameSplit[0]
+
+	vmIDString := string(vmIDStringByteArray)
+	_, err = uuid.Parse(vmIDString)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errVMIDParseFailed, err)
+	}
 
 	var projectID string
 
 	projectID = viper.GetString(CrusoeProjectIDFlag)
 	if projectID == "" {
 		var ok bool
-		kubeClientConfig, err := rest.InClusterConfig()
-		if err != nil {
+		kubeClientConfig, configErr := rest.InClusterConfig()
+		if configErr != nil {
 			return nil, fmt.Errorf("could not get kube client config: %w", err)
 		}
 
-		kubeClient, err := kubernetes.NewForConfig(kubeClientConfig)
-		if err != nil {
+		kubeClient, clientErr := kubernetes.NewForConfig(kubeClientConfig)
+		if clientErr != nil {
 			return nil, fmt.Errorf("could not get kube client: %w", err)
 		}
-		hostNode, nodeFetchErr := kubeClient.CoreV1().Nodes().Get(ctx, fullNodeName, metav1.GetOptions{})
+		hostNode, nodeFetchErr := kubeClient.CoreV1().Nodes().Get(ctx, viper.GetString(NodeNameFlag), metav1.GetOptions{})
 		if nodeFetchErr != nil {
 			return nil, fmt.Errorf("could not fetch current node with kube client: %w", err)
 		}
@@ -118,16 +125,16 @@ func getHostInstance(ctx context.Context) (*crusoeapi.InstanceV1Alpha5, error) {
 
 	instances, _, err := crusoeClient.VMsApi.ListInstances(ctx, projectID,
 		&crusoeapi.VMsApiListInstancesOpts{
-			Names: optional.NewString(shortNodeName),
+			Ids: optional.NewString(vmIDString),
 		})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list instances: %w", err)
 	}
 
 	if len(instances.Items) == 0 {
-		return nil, fmt.Errorf("%w: %s", errInstanceNotFound, shortNodeName)
+		return nil, fmt.Errorf("%w: %s", errInstanceNotFound, vmIDString)
 	} else if len(instances.Items) > 1 {
-		return nil, fmt.Errorf("%w: %s", errMultipleInstances, shortNodeName)
+		return nil, fmt.Errorf("%w: %s", errMultipleInstances, vmIDString)
 	}
 
 	return &instances.Items[0], nil
