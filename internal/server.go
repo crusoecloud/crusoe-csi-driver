@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -92,7 +93,7 @@ func getHostInstance(ctx context.Context) (*crusoeapi.InstanceV1Alpha5, error) {
 		return nil, fmt.Errorf("%w: %w", errVMIDReadFailed, err)
 	}
 
-	vmIDString := string(vmIDStringByteArray)
+	vmIDString := strings.TrimSpace(string(vmIDStringByteArray))
 	_, err = uuid.Parse(vmIDString)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errVMIDParseFailed, err)
