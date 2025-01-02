@@ -106,16 +106,16 @@ func getHostInstance(ctx context.Context) (*crusoeapi.InstanceV1Alpha5, error) {
 		var ok bool
 		kubeClientConfig, configErr := rest.InClusterConfig()
 		if configErr != nil {
-			return nil, fmt.Errorf("could not get kube client config: %w", err)
+			return nil, fmt.Errorf("could not get kube client config: %w", configErr)
 		}
 
 		kubeClient, clientErr := kubernetes.NewForConfig(kubeClientConfig)
 		if clientErr != nil {
-			return nil, fmt.Errorf("could not get kube client: %w", err)
+			return nil, fmt.Errorf("could not get kube client: %w", clientErr)
 		}
 		hostNode, nodeFetchErr := kubeClient.CoreV1().Nodes().Get(ctx, viper.GetString(NodeNameFlag), metav1.GetOptions{})
 		if nodeFetchErr != nil {
-			return nil, fmt.Errorf("could not fetch current node with kube client: %w", err)
+			return nil, fmt.Errorf("could not fetch current node with kube client: %w", nodeFetchErr)
 		}
 
 		projectID, ok = hostNode.Labels[projectIDLabelKey]
