@@ -74,7 +74,7 @@ func signMessageV1_0(message []byte, encodedKey string) ([]byte, error) {
 	// Key is b64 encoded.
 	expectedKey, err := base64.RawURLEncoding.DecodeString(encodedKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode key: %w", err)
+		return nil, fmt.Errorf("failed to decode Crusoe Secret Key: %w", err)
 	}
 
 	mac := hmac.New(sha256.New, expectedKey)

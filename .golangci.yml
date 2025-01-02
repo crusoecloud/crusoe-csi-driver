@@ -103,7 +103,7 @@ issues:
       source: "^//go:generate "
 
 run:
-  # include test  files or not
+  # include test files or not
   tests: true
 
 # golangci.com configuration

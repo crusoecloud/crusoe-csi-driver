@@ -22,6 +22,7 @@ var (
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY:   {},
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_SINGLE_WRITER: {},
 		csi.VolumeCapability_AccessMode_SINGLE_NODE_MULTI_WRITER:  {},
+		csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY:    {},
 	}
 	//nolint:gochecknoglobals  // can't construct const map
 	fsAllowedAccessModes = map[csi.VolumeCapability_AccessMode_Mode]struct{}{
