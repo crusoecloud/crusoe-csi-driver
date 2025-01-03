@@ -4,13 +4,15 @@ import "time"
 
 // Numeric constants.
 const (
-	NumBytesInGiB = 1024 * 1024 * 1024
-	NumGiBInTiB   = 1024
-	BlockSizeSSD  = 4096
-	MinSSDSizeGiB = 1
-	MaxSSDSizeGiB = NumGiBInTiB * 10
-	MinFSSizeGiB  = NumGiBInTiB
-	MaxFSSizeGiB  = NumGiBInTiB * 1000
+	NumBytesInGiB       = 1024 * 1024 * 1024
+	NumGiBInTiB         = 1024
+	BlockSizeSSD        = 4096
+	MinSSDSizeGiB       = 1
+	MaxSSDSizeGiB       = NumGiBInTiB * 10
+	SSDSizeIncrementGiB = 1
+	MinFSSizeGiB        = NumGiBInTiB
+	MaxFSSizeGiB        = NumGiBInTiB * 1000
+	FSSizeIncrementGiB  = NumGiBInTiB
 )
 
 // Map keys.

@@ -40,6 +40,7 @@ var (
 	errNoSizeRequested       = errors.New("no size requested")
 	errDiskTooSmall          = errors.New("disk size too small")
 	errDiskTooLarge          = errors.New("disk size too large")
+	errInvalidDiskSize       = errors.New("invalid disk size")
 	errUnsupportedAccessMode = errors.New("access mode not supported")
 	errUnsupportedAccessType = errors.New("access type not supported")
 )
@@ -118,6 +119,7 @@ func getCapacity(diskType common.DiskType) (maxSize int64, minSize int64) {
 	return maxSize, minSize
 }
 
+//nolint:cyclop // not that complex
 func validateDiskRequest(request *csi.CreateVolumeRequest, diskType common.DiskType) error {
 	capacityRange := request.GetCapacityRange()
 	if capacityRange == nil {
@@ -144,6 +146,25 @@ func validateDiskRequest(request *csi.CreateVolumeRequest, diskType common.DiskT
 			errDiskTooSmall,
 			minSize,
 			requestedSizeBytes)
+	}
+
+	switch diskType {
+	case common.DiskTypeSSD:
+		if requestedSizeBytes%(common.SSDSizeIncrementGiB*common.NumBytesInGiB) != 0 {
+			return status.Errorf(codes.OutOfRange,
+				"%s: requested size %d must be a multiple of %d (1GiB)",
+				errInvalidDiskSize,
+				requestedSizeBytes,
+				common.BlockSizeSSD*common.NumBytesInGiB)
+		}
+	case common.DiskTypeFS:
+		if requestedSizeBytes%(common.FSSizeIncrementGiB*common.NumBytesInGiB) != 0 {
+			return status.Errorf(codes.OutOfRange,
+				"%s: requested size %d must be a multiple of %d (1TiB)",
+				errInvalidDiskSize,
+				requestedSizeBytes,
+				common.NumBytesInGiB)
+		}
 	}
 
 	for _, capability := range request.GetVolumeCapabilities() {
