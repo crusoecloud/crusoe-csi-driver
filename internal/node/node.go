@@ -55,6 +55,7 @@ func (d *DefaultNode) NodePublishVolume(_ context.Context, request *csi.NodePubl
 
 	if request.GetReadonly() {
 		mountOpts = append(mountOpts, readOnlyMountOption)
+		mountOpts = append(mountOpts, noLoadMountOption)
 	}
 
 	err := nodePublishVolume(d.Mounter, d.Resizer, mountOpts, d.DiskType, request)

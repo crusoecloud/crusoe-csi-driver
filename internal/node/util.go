@@ -21,6 +21,7 @@ const (
 	expectedTypeSegments = 2
 	fsDiskFilesystem     = "virtiofs"
 	readOnlyMountOption  = "ro"
+	noLoadMountOption    = "noload"
 )
 
 var (
@@ -85,12 +86,11 @@ func nodePublishFilesystemVolume(serialNumber string,
 	diskType common.DiskType,
 	request *csi.NodePublishVolumeRequest,
 ) error {
-	// Check if the directory exists
-	if _, err := os.Stat(request.GetTargetPath()); errors.Is(err, os.ErrNotExist) {
-		// Directory does not exist, create it
-		if mkdirErr := os.MkdirAll(request.GetTargetPath(), newDirPerms); mkdirErr != nil {
-			return fmt.Errorf("failed to make directory for target path: %w", mkdirErr)
-		}
+	// Make parent directory for target path
+	// os.MkdirAll will be a noop if the directory already exists
+	mkDirErr := os.MkdirAll(request.GetTargetPath(), newDirPerms)
+	if mkDirErr != nil {
+		return fmt.Errorf("failed to make directory for target path: %w", mkDirErr)
 	}
 
 	mountOpts = append(mountOpts, request.GetVolumeCapability().GetMount().GetMountFlags()...)
