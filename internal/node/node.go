@@ -54,8 +54,9 @@ func (d *DefaultNode) NodePublishVolume(_ context.Context, request *csi.NodePubl
 	var mountOpts []string
 
 	if request.GetReadonly() {
-		mountOpts = append(mountOpts, readOnlyMountOption)
-		mountOpts = append(mountOpts, noLoadMountOption)
+		// Read-only volumes cannot be written to in any way
+		// We should not attempt to replay the journal
+		mountOpts = append(mountOpts, readOnlyMountOption, noLoadMountOption)
 	}
 
 	err := nodePublishVolume(d.Mounter, d.Resizer, mountOpts, d.DiskType, request)
