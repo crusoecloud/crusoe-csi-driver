@@ -21,6 +21,7 @@ const (
 	expectedTypeSegments = 2
 	fsDiskFilesystem     = "virtiofs"
 	readOnlyMountOption  = "ro"
+	noLoadMountOption    = "noload"
 )
 
 var (
@@ -37,30 +38,36 @@ func getSSDDevicePath(serialNumber string) string {
 	return fmt.Sprintf("/dev/disk/by-id/virtio-%s", serialNumber)
 }
 
-func nodePublishBlockVolume(devicePath string,
+func nodePublishBlockVolume(serialNumber string,
 	mounter *mount.SafeFormatAndMount,
 	mountOpts []string,
 	request *csi.NodePublishVolumeRequest,
 ) error {
 	dirPath := filepath.Dir(request.GetTargetPath())
-	// Check if the directory exists
-	if _, err := os.Stat(dirPath); errors.Is(err, os.ErrNotExist) {
-		// Directory does not exist, create it
-		if err := os.MkdirAll(dirPath, newDirPerms); err != nil {
-			return fmt.Errorf("failed to make directory for target path: %w", err)
-		}
+
+	// Make parent directory for target path
+	// os.MkdirAll will be a noop if the directory already exists
+	mkDirErr := os.MkdirAll(dirPath, newDirPerms)
+	if mkDirErr != nil {
+		return fmt.Errorf("failed to make directory for target path: %w", mkDirErr)
 	}
 
-	// expose the block volume as a file
-	f, err := os.OpenFile(request.GetTargetPath(), os.O_CREATE|os.O_EXCL, os.FileMode(newFilePerms))
-	if err != nil {
-		if !os.IsExist(err) {
+	// Check if the block volume file exists
+	_, err := os.Stat(request.GetTargetPath())
+	if errors.Is(err, os.ErrNotExist) {
+		// Expose the block volume as a file
+		f, openErr := os.OpenFile(request.GetTargetPath(), os.O_CREATE|os.O_EXCL, os.FileMode(newFilePerms))
+		if openErr != nil {
 			return fmt.Errorf("failed to make file for target path: %w", err)
 		}
+		if err = f.Close(); err != nil {
+			return fmt.Errorf("failed to close file after making target path: %w", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("failed to check if target path exists: %w", err)
 	}
-	if err = f.Close(); err != nil {
-		return fmt.Errorf("failed to close file after making target path: %w", err)
-	}
+
+	devicePath := getSSDDevicePath(serialNumber)
 
 	mountOpts = append(mountOpts, "bind")
 	mountOpts = append(mountOpts, request.GetVolumeCapability().GetMount().GetMountFlags()...)
@@ -72,19 +79,18 @@ func nodePublishBlockVolume(devicePath string,
 	return nil
 }
 
-func nodePublishFilesystemVolume(devicePath string,
+func nodePublishFilesystemVolume(serialNumber string,
 	mounter *mount.SafeFormatAndMount,
 	resizer *mount.ResizeFs,
 	mountOpts []string,
 	diskType common.DiskType,
 	request *csi.NodePublishVolumeRequest,
 ) error {
-	// Check if the directory exists
-	if _, err := os.Stat(request.GetTargetPath()); errors.Is(err, os.ErrNotExist) {
-		// Directory does not exist, create it
-		if mkdirErr := os.MkdirAll(request.GetTargetPath(), newDirPerms); mkdirErr != nil {
-			return fmt.Errorf("failed to make directory for target path: %w", mkdirErr)
-		}
+	// Make parent directory for target path
+	// os.MkdirAll will be a noop if the directory already exists
+	mkDirErr := os.MkdirAll(request.GetTargetPath(), newDirPerms)
+	if mkDirErr != nil {
+		return fmt.Errorf("failed to make directory for target path: %w", mkDirErr)
 	}
 
 	mountOpts = append(mountOpts, request.GetVolumeCapability().GetMount().GetMountFlags()...)
@@ -102,6 +108,7 @@ func nodePublishFilesystemVolume(devicePath string,
 			return fmt.Errorf("%w at target path %s: %s", errFailedMount, request.GetTargetPath(), err.Error())
 		}
 	} else {
+		devicePath := getSSDDevicePath(serialNumber)
 		err := mounter.FormatAndMount(devicePath,
 			request.GetTargetPath(),
 			request.GetVolumeCapability().GetMount().GetFsType(),
@@ -137,13 +144,11 @@ func nodePublishVolume(mounter *mount.SafeFormatAndMount,
 		return errVolumeMissingSerialNumber
 	}
 
-	devicePath := getSSDDevicePath(serialNumber)
-
 	switch {
 	case request.GetVolumeCapability().GetBlock() != nil:
-		return nodePublishBlockVolume(devicePath, mounter, mountOpts, request)
+		return nodePublishBlockVolume(serialNumber, mounter, mountOpts, request)
 	case request.GetVolumeCapability().GetMount() != nil:
-		return nodePublishFilesystemVolume(devicePath, mounter, resizer, mountOpts, diskType, request)
+		return nodePublishFilesystemVolume(serialNumber, mounter, resizer, mountOpts, diskType, request)
 	default:
 		return fmt.Errorf("%w: %s", errUnexpectedVolumeCapability, request.GetVolumeCapability())
 	}
