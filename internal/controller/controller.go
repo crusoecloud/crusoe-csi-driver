@@ -214,7 +214,7 @@ func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
 	_, err = common.AwaitOperation(ctx,
 		op.Operation,
 		d.HostInstance.ProjectId,
-		d.CrusoeClient.DiskOperationsApi.GetStorageDisksOperation)
+		d.CrusoeClient.VMOperationsApi.GetComputeVMsInstancesOperation)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get result of disk attachment: %s", err)
 	}
@@ -262,7 +262,7 @@ func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 	_, err = common.AwaitOperation(ctx,
 		op.Operation,
 		d.HostInstance.ProjectId,
-		d.CrusoeClient.DiskOperationsApi.GetStorageDisksOperation)
+		d.CrusoeClient.VMOperationsApi.GetComputeVMsInstancesOperation)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get result of disk detachment: %s", err)
 	}
