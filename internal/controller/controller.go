@@ -167,62 +167,71 @@ func (d *DefaultController) DeleteVolume(ctx context.Context,
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
-func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
-	request *csi.ControllerPublishVolumeRequest) (
+func (d *DefaultController) ControllerPublishVolume(_ context.Context,
+	_ *csi.ControllerPublishVolumeRequest) (
 	*csi.ControllerPublishVolumeResponse,
 	error,
 ) {
-	klog.Infof("Received request to publish volume: %+v", request)
-
-	// Check if the disk is already attached to the instance
-	attached, err := crusoe.CheckDiskAttached(ctx,
-		d.CrusoeClient,
-		request.GetVolumeId(),
-		request.GetNodeId(),
-		d.HostInstance.ProjectId)
-	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "failed to check if disk is attached to instance: %s", err)
-	}
-
-	if attached {
-		klog.Infof("Disk %s is already attached to instance %s, skipping publish", request.GetVolumeId(), request.GetNodeId())
-
-		return &csi.ControllerPublishVolumeResponse{}, nil
-	}
-
-	accessMode := request.VolumeCapability.GetAccessMode().Mode
-	mode := "read-write"
-	if accessMode == csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY ||
-		accessMode == csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY {
-
-		mode = "read-only"
-	}
-
-	op, _, err := d.CrusoeClient.VMsApi.UpdateInstanceAttachDisks(ctx, crusoeapi.InstancesAttachDiskPostRequestV1Alpha5{
-		AttachDisks: []crusoeapi.DiskAttachment{
-			{
-				AttachmentType: "data",
-				DiskId:         request.GetVolumeId(),
-				Mode:           mode,
-			},
-		},
-	}, d.HostInstance.ProjectId, request.GetNodeId())
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to attach disk: %s", err)
-	}
-
-	_, err = common.AwaitOperation(ctx,
-		op.Operation,
-		d.HostInstance.ProjectId,
-		d.CrusoeClient.VMOperationsApi.GetComputeVMsInstancesOperation)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get result of disk attachment: %s", err)
-	}
-
-	klog.Infof("Published volume: %+v", request)
-
-	return &csi.ControllerPublishVolumeResponse{}, nil
+	return nil, status.Errorf(codes.Internal, "intentional error for ControllerPublishVolume")
 }
+
+// func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
+//	request *csi.ControllerPublishVolumeRequest) (
+//	*csi.ControllerPublishVolumeResponse,
+//	error,
+// ) {
+//	klog.Infof("Received request to publish volume: %+v", request)
+//
+//	// Check if the disk is already attached to the instance
+//	attached, err := crusoe.CheckDiskAttached(ctx,
+//		d.CrusoeClient,
+//		request.GetVolumeId(),
+//		request.GetNodeId(),
+//		d.HostInstance.ProjectId)
+//	if err != nil {
+//		return nil, status.Errorf(codes.NotFound, "failed to check if disk is attached to instance: %s", err)
+//	}
+//
+//	if attached {
+//		klog.Infof("Disk %s is already attached to instance %s, skipping publish",
+//		request.GetVolumeId(), request.GetNodeId())
+//
+//		return &csi.ControllerPublishVolumeResponse{}, nil
+//	}
+//
+//	accessMode := request.VolumeCapability.GetAccessMode().Mode
+//	mode := "read-write"
+//	if accessMode == csi.VolumeCapability_AccessMode_SINGLE_NODE_READER_ONLY ||
+//		accessMode == csi.VolumeCapability_AccessMode_MULTI_NODE_READER_ONLY {
+//
+//		mode = "read-only"
+//	}
+//
+//	op, _, err := d.CrusoeClient.VMsApi.UpdateInstanceAttachDisks(ctx, crusoeapi.InstancesAttachDiskPostRequestV1Alpha5{
+//		AttachDisks: []crusoeapi.DiskAttachment{
+//			{
+//				AttachmentType: "data",
+//				DiskId:         request.GetVolumeId(),
+//				Mode:           mode,
+//			},
+//		},
+//	}, d.HostInstance.ProjectId, request.GetNodeId())
+//	if err != nil {
+//		return nil, status.Errorf(codes.Internal, "failed to attach disk: %s", err)
+//	}
+//
+//	_, err = common.AwaitOperation(ctx,
+//		op.Operation,
+//		d.HostInstance.ProjectId,
+//		d.CrusoeClient.VMOperationsApi.GetComputeVMsInstancesOperation)
+//	if err != nil {
+//		return nil, status.Errorf(codes.Internal, "failed to get result of disk attachment: %s", err)
+//	}
+//
+//	klog.Infof("Published volume: %+v", request)
+//
+//	return &csi.ControllerPublishVolumeResponse{}, nil
+//}
 
 func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 	request *csi.ControllerUnpublishVolumeRequest) (
