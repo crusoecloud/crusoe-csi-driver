@@ -19,6 +19,7 @@ test_and_lint:
     - if: '$CI_COMMIT_TAG && $CI_COMMIT_TAG !~ /^(.+\/)?v[0-9]+\.[0-9]+\.[0-9]+$/'
 
 build_and_push:
+  needs: []
   script:
     - |-
       if [ "${BUILD_IN_SUBPATH:-true}" == "true" ]; then
