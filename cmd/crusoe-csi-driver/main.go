@@ -46,14 +46,14 @@ func setFlags() {
 			internal.CSIDriverTypeNames,
 			true),
 		internal.CSIDriverTypeFlag,
-		"help for driver type")
+		"Crusoe CSI Driver type")
 	rootCmd.Flags().Var(
 		enumflag.NewSlice(&internal.Services,
 			internal.ServicesFlag,
 			internal.ServiceTypeNames,
 			true),
 		internal.ServicesFlag,
-		"help for services")
+		"Crusoe CSI Driver services")
 	rootCmd.Flags().String(internal.NodeNameFlag, "", "Kubernetes Node Name")
 	rootCmd.Flags().String(internal.SocketAddressFlag, internal.SocketAddressDefault, "CSI Socket Address")
 
