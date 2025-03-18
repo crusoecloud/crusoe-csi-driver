@@ -237,12 +237,14 @@ func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 		request.GetVolumeId(),
 		request.GetNodeId(),
 		d.HostInstance.ProjectId)
-	if errors.Is(err, crusoe.ErrInstanceNotFound) {
-		// Instance does not exist
-		klog.Infof("Instance %s is already deleted, skipping unpublish", request.GetNodeId())
+	if err != nil {
+		if errors.Is(err, crusoe.ErrInstanceNotFound) {
+			// Instance does not exist
+			klog.Infof("Instance %s is already deleted, skipping unpublish", request.GetNodeId())
 
-		return &csi.ControllerUnpublishVolumeResponse{}, nil
-	} else if err != nil {
+			return &csi.ControllerUnpublishVolumeResponse{}, nil
+		}
+
 		return nil, status.Errorf(codes.NotFound, "failed to check if disk is attached to instance: %s", err)
 	}
 
