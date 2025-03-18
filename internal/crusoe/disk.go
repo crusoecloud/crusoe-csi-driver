@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -21,6 +22,8 @@ var (
 	ErrDiskDifferentLocation  = errors.New("disk has different location")
 	ErrDiskDifferentBlockSize = errors.New("disk has different block size")
 	ErrDiskDifferentType      = errors.New("disk has different type")
+
+	ErrInstanceNotFound = errors.New("instance not found")
 )
 
 func NormalizeDiskSizeToGiB(disk *crusoeapi.DiskV1Alpha5) (int, error) {
@@ -190,7 +193,12 @@ func CheckDiskAttached(ctx context.Context,
 	instanceID,
 	projectID string,
 ) (bool, error) {
-	instance, _, err := crusoeClient.VMsApi.GetInstance(ctx, projectID, instanceID)
+	instance, resp, err := crusoeClient.VMsApi.GetInstance(ctx, projectID, instanceID)
+
+	if resp != nil && resp.StatusCode == http.StatusNotFound {
+		return false, ErrInstanceNotFound
+	}
+
 	if err != nil {
 		return false, fmt.Errorf("failed to get instance: %w", err)
 	}
