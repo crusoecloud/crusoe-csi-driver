@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -25,7 +24,8 @@ var (
 	ErrDiskDifferentBlockSize = errors.New("disk has different block size")
 	ErrDiskDifferentType      = errors.New("disk has different type")
 
-	ErrInstanceNotFound = errors.New("instance not found")
+	ErrInstanceNotFound  = errors.New("instance not found")
+	ErrMultipleInstances = errors.New("multiple instances found")
 )
 
 func NormalizeDiskSizeToGiB(disk *crusoeapi.DiskV1Alpha5) (int, error) {
@@ -186,18 +186,39 @@ func GetVolumeFromDisk(disk *crusoeapi.DiskV1Alpha5,
 	}, nil
 }
 
+func GetInstanceByID(ctx context.Context,
+	crusoeClient *crusoeapi.APIClient,
+	instanceID,
+	projectID string,
+) (*crusoeapi.InstanceV1Alpha5, error) {
+	listVMOpts := &crusoeapi.VMsApiListInstancesOpts{
+		Ids: optional.NewString(instanceID),
+	}
+	instances, _, err := crusoeClient.VMsApi.ListInstances(ctx, projectID, listVMOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list instances: %w", err)
+	}
+
+	if len(instances.Items) == 0 {
+		return nil, fmt.Errorf("%w: found %d instances with id %s, expected 1",
+			ErrInstanceNotFound, len(instances.Items), instanceID)
+	} else if len(instances.Items) > 1 {
+		return nil, fmt.Errorf("%w: found %d instances with id %s, expected 1",
+			ErrMultipleInstances, len(instances.Items), instanceID)
+	}
+
+	return &instances.Items[0], nil
+}
+
 func CheckDiskAttached(ctx context.Context,
 	crusoeClient *crusoeapi.APIClient,
 	diskID,
 	instanceID,
 	projectID string,
 ) (bool, error) {
-	instance, resp, err := crusoeClient.VMsApi.GetInstance(ctx, projectID, instanceID)
-
-	if resp != nil && resp.StatusCode == http.StatusNotFound {
-		return false, ErrInstanceNotFound
-	}
-
+	// Use GetInstanceByID (ListInstances) instead of GetInstance because we can easily identify
+	// when an instance is not found
+	instance, err := GetInstanceByID(ctx, crusoeClient, instanceID, projectID)
 	if err != nil {
 		return false, fmt.Errorf("failed to get instance: %w", err)
 	}
