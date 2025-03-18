@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/antihax/optional"
+
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
@@ -51,20 +53,18 @@ func FindDiskByNameFallible(ctx context.Context,
 	projectID string,
 	name string,
 ) (*crusoeapi.DiskV1Alpha5, error) {
-	disks, _, listErr := crusoeClient.DisksApi.ListDisks(ctx, projectID)
+	disks, _, listErr := crusoeClient.DisksApi.ListDisks(ctx,
+		projectID,
+		&crusoeapi.DisksApiListDisksOpts{DiskNames: optional.NewInterface([]string{name})})
 	if listErr != nil {
 		return nil, fmt.Errorf("failed to list disks: %w", common.UnpackSwaggerErr(listErr))
 	}
 
-	// indexing is used to avoid a copy
-	for i := range disks.Items {
-		currDisk := disks.Items[i]
-		if currDisk.Name == name {
-			return &currDisk, nil
-		}
+	if len(disks.Items) != 1 {
+		return nil, fmt.Errorf("%w: found %d disks with name %s, expected 1", ErrDiskNotFound, len(disks.Items), name)
 	}
 
-	return nil, ErrDiskNotFound
+	return &disks.Items[0], nil
 }
 
 func FindDiskByIDFallible(ctx context.Context,
@@ -72,20 +72,18 @@ func FindDiskByIDFallible(ctx context.Context,
 	projectID string,
 	diskID string,
 ) (*crusoeapi.DiskV1Alpha5, error) {
-	disks, _, listErr := crusoeClient.DisksApi.ListDisks(ctx, projectID)
+	disks, _, listErr := crusoeClient.DisksApi.ListDisks(ctx,
+		projectID,
+		&crusoeapi.DisksApiListDisksOpts{DiskIds: optional.NewInterface([]string{diskID})})
 	if listErr != nil {
 		return nil, fmt.Errorf("failed to list disks: %w", common.UnpackSwaggerErr(listErr))
 	}
 
-	// indexing is used to avoid a copy
-	for i := range disks.Items {
-		currDisk := disks.Items[i]
-		if currDisk.Id == diskID {
-			return &currDisk, nil
-		}
+	if len(disks.Items) != 1 {
+		return nil, fmt.Errorf("%w: found %d disks with id %s, expected 1", ErrDiskNotFound, len(disks.Items), diskID)
 	}
 
-	return nil, ErrDiskNotFound
+	return &disks.Items[0], nil
 }
 
 func GetCreateDiskRequest(request *csi.CreateVolumeRequest,
@@ -129,8 +127,9 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 
 	diskSizeGiB, err := NormalizeDiskSizeToGiB(disk)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse disk size: %w", err)
 	}
+
 	requestSizeGiB, err := common.RequestSizeToGiB(request.GetCapacityRange())
 	if err != nil {
 		return fmt.Errorf("failed to parse request size: %w", err)
