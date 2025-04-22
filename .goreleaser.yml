@@ -4,6 +4,7 @@ version: 2
 before:
   hooks:
     - go mod tidy
+# TODO: Also build health-probe binary
 builds:
   - main: ./cmd/crusoe-csi-driver/main.go
     env:
@@ -12,7 +13,8 @@ builds:
     flags:
         - -trimpath
     ldflags:
-      - "-X 'github.com/crusoecloud/crusoe-csi-driver/internal/driver.version={{ .Tag }}' -X 'github.com/crusoecloud/crusoe-csi-driver/internal/driver.name={{ .Env.CRUSOE_CSI_DRIVER_NAME }}'"
+      - |
+        -X github.com/crusoecloud/crusoe-csi-driver/internal/common.PluginVersion={{ .Tag }}
     goos:
       - linux
     goarch:

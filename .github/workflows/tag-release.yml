@@ -10,9 +10,6 @@ permissions:
   attestations: write
   packages: write
 
-env:
-  CRUSOE_CSI_DRIVER_NAME: csi.crusoe.ai
-
 jobs:
   semver-tag:
     runs-on: ubuntu-latest
