@@ -8,10 +8,8 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"os/signal"
 	"strings"
-	"sync"
-	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -29,7 +27,6 @@ import (
 
 	"github.com/antihax/optional"
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,6 +42,8 @@ const (
 	projectIDLabelKey = "crusoe.ai/project.id"
 
 	vmIDFilePath = "/sys/class/dmi/id/product_uuid"
+
+	gracefulTimeoutDuration = 10 * time.Second
 )
 
 var (
@@ -56,36 +55,13 @@ var (
 		projectIDEnvKey, projectIDLabelKey)
 )
 
-func interruptHandler() (*sync.WaitGroup, context.Context) {
-	// Handle interrupts
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-	signal.Notify(interrupt, syscall.SIGTERM)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			return
-
-		case <-interrupt:
-			wg.Done()
-			cancel()
-		}
-	}()
-
-	return &wg, ctx
-}
-
 //nolint:cyclop // function is already fairly clean
 func getHostInstance(ctx context.Context) (*crusoeapi.InstanceV1Alpha5, error) {
 	crusoeClient := crusoe.NewCrusoeClient(
 		viper.GetString(CrusoeAPIEndpointFlag),
 		viper.GetString(CrusoeAccessKeyFlag),
 		viper.GetString(CrusoeSecretKeyFlag),
-		"crusoe-csi-driver/0.0.1",
+		fmt.Sprintf("%s/%s", common.PluginName, common.PluginVersion),
 	)
 
 	vmIDStringByteArray, err := os.ReadFile(vmIDFilePath)
@@ -174,27 +150,10 @@ func newCrusoeClientWithViperConfig(pluginName string, pluginVersion string) *cr
 }
 
 //nolint:funlen,cyclop // server instantiation is long
-func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) (
-	diskType common.DiskType,
-	pluginName string,
-	pluginVersion string,
-) {
+func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) {
 	serveIdentity := false
 	serveController := false
 	serveNode := false
-
-	switch SelectedCSIDriverType {
-	case CSIDriverTypeSSD:
-		diskType = common.DiskTypeSSD
-		pluginName = common.SSDPluginName
-		pluginVersion = common.SSDPluginVersion
-	case CSIDriverTypeFS:
-		diskType = common.DiskTypeFS
-		pluginName = common.FSPluginName
-		pluginVersion = common.FSPluginVersion
-	default:
-		panic(fmt.Sprintf("%s is not a valid driver type", viper.GetString(CSIDriverTypeFlag)))
-	}
 
 	for _, s := range Services {
 		switch s {
@@ -213,17 +172,17 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 		if serveController {
 			capabilities = append(capabilities, &common.PluginCapabilityControllerService)
 		}
-		if diskType == common.DiskTypeFS {
+		if common.PluginDiskType == common.DiskTypeFS {
 			capabilities = append(capabilities, &common.PluginCapabilityVolumeExpansionOnline)
 		}
-		if diskType == common.DiskTypeSSD {
+		if common.PluginDiskType == common.DiskTypeSSD {
 			capabilities = append(capabilities, &common.PluginCapabilityVolumeExpansionOffline)
 		}
 
 		csi.RegisterIdentityServer(grpcServer, &identity.Service{
 			Capabilities:  capabilities,
-			PluginName:    pluginName,
-			PluginVersion: pluginVersion,
+			PluginName:    common.PluginName,
+			PluginVersion: common.PluginVersion,
 		})
 	}
 
@@ -231,12 +190,12 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 		capabilities := common.BaseControllerCapabilities
 
 		csi.RegisterControllerServer(grpcServer, &controller.DefaultController{
-			CrusoeClient:  newCrusoeClientWithViperConfig(pluginName, pluginVersion),
+			CrusoeClient:  newCrusoeClientWithViperConfig(common.PluginName, common.PluginVersion),
 			HostInstance:  hostInstance,
 			Capabilities:  capabilities,
-			DiskType:      diskType,
-			PluginName:    pluginName,
-			PluginVersion: pluginVersion,
+			DiskType:      common.PluginDiskType,
+			PluginName:    common.PluginName,
+			PluginVersion: common.PluginVersion,
 		})
 	}
 
@@ -246,52 +205,91 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 		// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
 
 		csi.RegisterNodeServer(grpcServer, &node.DefaultNode{
-			CrusoeClient:  newCrusoeClientWithViperConfig(pluginName, pluginVersion),
+			CrusoeClient:  newCrusoeClientWithViperConfig(common.PluginName, common.PluginVersion),
 			HostInstance:  hostInstance,
 			Capabilities:  capabilities,
 			Mounter:       mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
 			Resizer:       mount.NewResizeFs(exec.New()),
-			DiskType:      diskType,
-			PluginName:    pluginName,
-			PluginVersion: pluginVersion,
+			DiskType:      common.PluginDiskType,
+			PluginName:    common.PluginName,
+			PluginVersion: common.PluginVersion,
 		})
 	}
-
-	return diskType, pluginName, pluginVersion
 }
 
-func RunMain(_ *cobra.Command, _ []string) error {
-	wg, ctx := interruptHandler()
+func gracefulStopWithTimeout(grpcServer *grpc.Server, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	doneCh := make(chan struct{}, 1)
 
-	srv := grpc.NewServer()
+	go func() {
+		grpcServer.GracefulStop()
+		close(doneCh)
+	}()
 
-	hostInstance, err := getHostInstance(ctx)
+	select {
+	case <-doneCh:
+		break
+	case <-ctx.Done():
+		klog.Infof("Graceful stop timeout exceeded, forcing stop")
+		grpcServer.Stop()
+	}
+}
+
+func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptChan <-chan os.Signal) error {
+	hostInstance, err := getHostInstance(rootCtx)
 	if err != nil {
 		return fmt.Errorf("failed to get host instance: %w", err)
 	}
+
 	klog.Infof("Crusoe host instance ID: %+v", hostInstance.Id)
 
-	diskType, pluginName, pluginVersion := registerServices(srv, hostInstance)
-	_ = diskType
-
+	srv := grpc.NewServer(grpc.ConnectionTimeout(gracefulTimeoutDuration))
+	registerServices(srv, hostInstance)
 	listener, err := listen()
 	if err != nil {
 		return err
 	}
 
 	klog.Infof("Listening on: %s", listener.Addr())
+	gRPCErrChan := make(chan error, 1)
 
 	go func() {
-		klog.Infof("Starting driver name: %s version: %s", pluginName, pluginVersion)
+		klog.Infof("Starting driver %s %s", common.PluginName, common.PluginVersion)
 		err = srv.Serve(listener)
-		if !errors.Is(err, grpc.ErrServerStopped) {
-			klog.Errorf("gRPC server stopped: %s", err)
-		}
+		gRPCErrChan <- err
 	}()
 
-	wg.Wait()
+	select {
+	case <-rootCtx.Done():
+		klog.Infof("Root context cancelled")
+	case <-interruptChan:
+		klog.Infof("Received interrupt signal, shutting down")
+		rootCtxCancel()
+	case gRPCErr := <-gRPCErrChan:
+		rootCtxCancel()
+		if gRPCErr != nil {
+			if errors.Is(gRPCErr, grpc.ErrServerStopped) {
+				klog.Infof("gRPC server stopped")
+				gracefulStopWithTimeout(srv, gracefulTimeoutDuration)
+				klog.Infof("Driver %s %s stopped", common.PluginName, common.PluginVersion)
 
-	srv.GracefulStop()
+				return nil
+			}
+		}
+
+		// An error has occurred, attempt to gracefully stop the gRPC server
+		klog.Errorf("Received error from gRPC server: %s", gRPCErr)
+		gracefulStopWithTimeout(srv, gracefulTimeoutDuration)
+		klog.Infof("Driver %s %s stopped", common.PluginName, common.PluginVersion)
+
+		return gRPCErr
+	}
+
+	// Normal termination flow
+	klog.Infof("Gracefully stopping driver %s %s", common.PluginName, common.PluginVersion)
+	gracefulStopWithTimeout(srv, gracefulTimeoutDuration)
+	klog.Infof("Driver %s %s stopped", common.PluginName, common.PluginVersion)
 
 	return nil
 }

@@ -30,20 +30,15 @@ const (
 
 const numExpectedComponents = 2
 
-var (
-	ErrUnableToGetOpRes         = errors.New("failed to get result of operation")
-	ErrUnexpectedOperationState = errors.New("unexpected operation state")
-	ErrNoSizeRequested          = errors.New("no disk size requested")
-)
-
 func CancellableSleep(ctx context.Context, duration time.Duration) error {
 	t := time.NewTimer(duration)
 	select {
 	case <-ctx.Done():
 		t.Stop()
 
-		return ErrTimeout
+		return fmt.Errorf("context cancelled: %w", ctx.Err())
 	case <-t.C:
+		// Sleep time elapsed, return control to caller
 	}
 
 	return nil

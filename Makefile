@@ -12,11 +12,12 @@ GO_ACC_VERSION = latest
 GOTESTSUM_VERSION = latest
 GOCOVER_VERSION = latest
 
-GO_LDFLAGS=-ldflags "-X 'github.com/crusoecloud/crusoe-csi-driver/internal/driver.version=$$CRUSOE_CSI_DRIVER_VERSION' -X 'github.com/crusoecloud/crusoe-csi-driver/internal/driver.name=$$CRUSOE_CSI_DRIVER_NAME'"
+export CRUSOE_CSI_DRIVER_VERSION?=$(shell git describe --always --tags --dirty)
+GO_LDFLAGS=-ldflags "-X github.com/crusoecloud/crusoe-csi-driver/internal/common.PluginVersion=$$CRUSOE_CSI_DRIVER_VERSION"
 
 .PHONY: run
 run:
-	go run cmd/crusoe-csi-driver/main.go
+	go run ${GO_LDFLAGS} cmd/crusoe-csi-driver/main.go
 
 .PHONY: dev
 dev: test build-deps lint ## Runs a build-deps, test, lint

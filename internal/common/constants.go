@@ -33,11 +33,17 @@ const (
 
 // Plugin metadata.
 const (
-	SSDPluginName    = "ssd.csi.crusoe.ai"
-	SSDPluginVersion = "0.1.0"
+	SSDPluginName = "ssd.csi.crusoe.ai"
+	FSPluginName  = "fs.csi.crusoe.ai"
+)
 
-	FSPluginName    = "fs.csi.crusoe.ai"
-	FSPluginVersion = "0.1.0"
+var (
+	//nolint:gochecknoglobals // Need to be a variable to set based on SelectedCSIDriverType at runtime
+	PluginName = ""
+	//nolint:gochecknoglobals // Need to be a variable for ldflags injection
+	PluginVersion = ""
+	//nolint:gochecknoglobals // Need to be a variable to set based on SelectedCSIDriverType at runtime
+	PluginDiskType = DiskTypeSSD
 )
 
 // Runtime options.

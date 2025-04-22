@@ -194,12 +194,12 @@ func parseRequiredTopology(request *csi.CreateVolumeRequest,
 		var ok bool
 		for _, topology := range request.GetAccessibilityRequirements().GetRequisite() {
 			if location, ok = topology.Segments[common.GetTopologyKey(pluginName, common.TopologyLocationKey)]; ok {
-				return location, requireSupportsFS
+				return location, false
 			}
 		}
 
 		// Otherwise, we default to the location of the controller
-		return hostInstance.Location, requireSupportsFS
+		return hostInstance.Location, false
 	case common.DiskTypeFS:
 		// If the request is for a shared disk, we require a segment with
 		// a location and a "supports-shared-disks" topology key
@@ -209,7 +209,8 @@ func parseRequiredTopology(request *csi.CreateVolumeRequest,
 			segmentLocation, locationOk := topology.Segments[common.GetTopologyKey(pluginName, common.TopologyLocationKey)]
 			segmentSupportsFS, supportsFSOk := topology.Segments[common.GetTopologyKey(pluginName, common.TopologySupportsSharedDisksKey)]
 			segmentSupportsFSBool, parseErr := strconv.ParseBool(segmentSupportsFS)
-			if locationOk && supportsFSOk && parseErr == nil && segmentSupportsFSBool {
+			parseErrOk := parseErr == nil
+			if locationOk && supportsFSOk && parseErrOk && segmentSupportsFSBool {
 				return segmentLocation, segmentSupportsFSBool
 			}
 		}
