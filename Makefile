@@ -1,7 +1,9 @@
 PREFIX?=$(shell pwd)
 
-NAME := crusoe-csi-driver
-PKG := github.com/crusoecloud/crusoe-csi-driver/cmd/$(NAME)
+CSI_DRIVER_NAME := crusoe-csi-driver
+HEALTH_PROBE_NAME := health-probe
+CSI_DRIVER_PKG := github.com/crusoecloud/crusoe-csi-driver/cmd/$(CSI_DRIVER_NAME)
+HEALTH_PROBE_PKG := github.com/crusoecloud/crusoe-csi-driver/cmd/${HEALTH_PROBE_NAME}
 
 BUILDDIR := ${PREFIX}/dist
 # Set any default go build tags
@@ -67,15 +69,17 @@ lint-ci: ## Verifies `golangci-lint` passes and outputs in CI-friendly format
 
 .PHONY: build
 build: ## Builds the executable and places it in the build dir
-	@go build -o ${BUILDDIR}/${NAME} ${PKG}
+	@go build -o ${BUILDDIR}/${NAME} ${CSI_DRIVER_PKG}
 
 .PHONY: cross
 cross: ## Builds the cross compiled executable for use within a container
-	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${BUILDDIR}/${NAME} ${GO_LDFLAGS} ${PKG}
+	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${BUILDDIR}/${CSI_DRIVER_NAME} ${GO_LDFLAGS} ${CSI_DRIVER_PKG}
+	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${BUILDDIR}/${HEALTH_PROBE_NAME} ${GO_LDFLAGS} ${HEALTH_PROBE_PKG}
+
 
 .PHONY: install
 install: ## Builds and installs the executable on PATH
-	@go install ${PKG}
+	@go install ${CSI_DRIVER_PKG}
 
 .PHONY: help
 help:
