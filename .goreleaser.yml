@@ -4,9 +4,9 @@ version: 2
 before:
   hooks:
     - go mod tidy
-# TODO: Also build health-probe binary
 builds:
-  - main: ./cmd/crusoe-csi-driver/main.go
+  - id: crusoe-csi-driver
+    main: ./cmd/crusoe-csi-driver/main.go
     env:
       - CGO_ENABLED=0
     mod_timestamp: '{{.CommitTimestamp }}'
@@ -21,6 +21,22 @@ builds:
       - amd64
       - arm64
     binary: '{{ .ProjectName }}'
+  - id: health-probe
+    main: ./cmd/health-probe/main.go
+    env:
+      - CGO_ENABLED=0
+    mod_timestamp: '{{.CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - |
+        -X github.com/crusoecloud/crusoe-csi-driver/internal/common.PluginVersion={{ .Tag }}
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    binary: 'health-probe'
 dockers:
   - image_templates:
       - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Tag }}-amd64'
@@ -29,6 +45,7 @@ dockers:
       - "--pull"
       - "--platform=linux/amd64"
     dockerfile: Dockerfile.goreleaser
+    goarch: amd64
   - image_templates:
       - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Tag }}-arm64'
     use: buildx
