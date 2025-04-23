@@ -20,9 +20,10 @@ import (
 
 //nolint:gochecknoglobals  // Global command instance
 var rootCmd = &cobra.Command{
-	Use:   "crusoe-csi-driver",
-	Short: "Crusoe Container Storage Interface (CSI) driver",
-	RunE:  HealthProbe,
+	Use:          "health-probe",
+	Short:        "Crusoe Container Storage Interface (CSI) health probe utility",
+	SilenceUsage: true, // Silence usage print if an error occurs
+	RunE:         HealthProbe,
 }
 
 const (
