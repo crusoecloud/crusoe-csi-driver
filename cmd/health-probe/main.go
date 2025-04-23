@@ -39,8 +39,6 @@ func ProbeHelper(ctx context.Context) error {
 	// Connect to the socket using NewClient
 	conn, err := grpc.NewClient(viper.GetString(internal.SocketAddressFlag), opts...)
 	if err != nil {
-		klog.Errorf("Failed to connect to CSI socket")
-
 		return fmt.Errorf("failed to connect to CSI socket: %w", err)
 	}
 	defer func(conn *grpc.ClientConn) {
@@ -56,8 +54,6 @@ func ProbeHelper(ctx context.Context) error {
 	// Example: Call GetPluginInfo method
 	_, err = identityClient.Probe(ctx, &csi.ProbeRequest{})
 	if err != nil {
-		klog.Errorf("Failed to probe CSI service: %v\n", err)
-
 		return fmt.Errorf("failed to probe CSI service: %w", err)
 	}
 
@@ -71,8 +67,6 @@ func HealthProbe(_ *cobra.Command, _ []string) error {
 
 	err := ProbeHelper(ctx)
 	if err != nil {
-		klog.Errorf("Health probe failed: %v\n", err)
-
 		return err
 	}
 
