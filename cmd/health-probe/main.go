@@ -31,12 +31,10 @@ const (
 )
 
 func ProbeHelper(ctx context.Context) error {
-	// Set up connection options
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
-	// Connect to the socket using NewClient
 	conn, err := grpc.NewClient(viper.GetString(internal.SocketAddressFlag), opts...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to CSI socket: %w", err)
@@ -48,10 +46,8 @@ func ProbeHelper(ctx context.Context) error {
 		}
 	}(conn)
 
-	// Create the identity client
 	identityClient := csi.NewIdentityClient(conn)
 
-	// Example: Call GetPluginInfo method
 	_, err = identityClient.Probe(ctx, &csi.ProbeRequest{})
 	if err != nil {
 		return fmt.Errorf("failed to probe CSI service: %w", err)
@@ -61,7 +57,6 @@ func ProbeHelper(ctx context.Context) error {
 }
 
 func HealthProbe(_ *cobra.Command, _ []string) error {
-	// Set up a context with a timeout
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
 
