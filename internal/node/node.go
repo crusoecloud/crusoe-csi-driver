@@ -24,12 +24,12 @@ type DefaultNode struct {
 	CrusoeClient      *crusoeapi.APIClient
 	HostInstance      *crusoeapi.InstanceV1Alpha5
 	Mounter           *mount.SafeFormatAndMount
-	MaxVolumesPerNode int64
 	Resizer           *mount.ResizeFs
 	DiskType          common.DiskType
 	PluginName        string
 	PluginVersion     string
 	Capabilities      []*csi.NodeServiceCapability
+	MaxVolumesPerNode int64
 }
 
 func (d *DefaultNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (

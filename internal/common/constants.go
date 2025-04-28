@@ -44,7 +44,7 @@ var (
 	PluginVersion string
 	//nolint:gochecknoglobals // Need to be a variable to set based on SelectedCSIDriverType at runtime
 	// Technically PluginDiskType will be initialized to an empty string, which is not a valid DiskType
-	// However, PluginDiskType will always be overwritten by SetPluginVariables to a valid DiskType
+	// However, PluginDiskType will always be overwritten by SetPluginVariables to a valid DiskType.
 	PluginDiskType DiskType
 )
 
