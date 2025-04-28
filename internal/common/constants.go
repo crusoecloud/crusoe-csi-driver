@@ -39,11 +39,13 @@ const (
 
 var (
 	//nolint:gochecknoglobals // Need to be a variable to set based on SelectedCSIDriverType at runtime
-	PluginName = ""
+	PluginName string
 	//nolint:gochecknoglobals // Need to be a variable for ldflags injection
-	PluginVersion = ""
+	PluginVersion string
 	//nolint:gochecknoglobals // Need to be a variable to set based on SelectedCSIDriverType at runtime
-	PluginDiskType = DiskTypeSSD
+	// Technically PluginDiskType will be initialized to an empty string, which is not a valid DiskType
+	// However, PluginDiskType will always be overwritten by SetPluginVariables to a valid DiskType
+	PluginDiskType DiskType
 )
 
 // Runtime options.
