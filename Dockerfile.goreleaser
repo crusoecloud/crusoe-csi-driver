@@ -11,6 +11,5 @@ RUN apk update && \
     rm -rf /var/cache/apk/*
 
 COPY crusoe-csi-driver /usr/local/go/bin/crusoe-csi-driver
-COPY health-probe /usr/local/go/bin/health-probe
 
 ENTRYPOINT ["/usr/local/go/bin/crusoe-csi-driver"]
