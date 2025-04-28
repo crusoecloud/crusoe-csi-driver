@@ -172,13 +172,16 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 		if serveController {
 			capabilities = append(capabilities, &common.PluginCapabilityControllerService)
 		}
-		if common.PluginDiskType == common.DiskTypeFS {
+		switch common.PluginDiskType {
+		case common.DiskTypeFS:
 			capabilities = append(capabilities, &common.PluginCapabilityVolumeExpansionOnline)
-		}
-		if common.PluginDiskType == common.DiskTypeSSD {
+		case common.DiskTypeSSD:
 			capabilities = append(capabilities, &common.PluginCapabilityVolumeExpansionOffline)
+		default:
+			// Switch is intended to be exhaustive, reaching this case is a bug
+			panic(fmt.Sprintf(
+				"Switch is intended to be exhaustive, %s is not a valid switch case", common.PluginDiskType))
 		}
-
 		csi.RegisterIdentityServer(grpcServer, &identity.Service{
 			Capabilities:  capabilities,
 			PluginName:    common.PluginName,
@@ -201,18 +204,30 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 
 	if serveNode {
 		capabilities := common.BaseNodeCapabilities
+		var maxVolumesPerNode int64
+
+		switch common.PluginDiskType {
+		case common.DiskTypeSSD:
+			maxVolumesPerNode = common.MaxSSDVolumesPerNode - 1 // Subtract 1 to allow for the OS/boot disk
+		case common.DiskTypeFS:
+			maxVolumesPerNode = common.MaxFSVolumesPerNode
+		default:
+			// Switch is intended to be exhaustive, reaching this case is a bug
+			panic(fmt.Sprintf(
+				"Switch is intended to be exhaustive, %s is not a valid switch case", common.PluginDiskType))
+		}
 
 		// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
-
 		csi.RegisterNodeServer(grpcServer, &node.DefaultNode{
-			CrusoeClient:  newCrusoeClientWithViperConfig(common.PluginName, common.PluginVersion),
-			HostInstance:  hostInstance,
-			Capabilities:  capabilities,
-			Mounter:       mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
-			Resizer:       mount.NewResizeFs(exec.New()),
-			DiskType:      common.PluginDiskType,
-			PluginName:    common.PluginName,
-			PluginVersion: common.PluginVersion,
+			CrusoeClient:      newCrusoeClientWithViperConfig(common.PluginName, common.PluginVersion),
+			HostInstance:      hostInstance,
+			Capabilities:      capabilities,
+			MaxVolumesPerNode: maxVolumesPerNode,
+			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
+			Resizer:           mount.NewResizeFs(exec.New()),
+			DiskType:          common.PluginDiskType,
+			PluginName:        common.PluginName,
+			PluginVersion:     common.PluginVersion,
 		})
 	}
 }

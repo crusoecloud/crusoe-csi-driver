@@ -56,7 +56,9 @@ func supportsAccessMode(volumeCapability *csi.VolumeCapability, diskType common.
 			return true
 		}
 	default:
-		panic(fmt.Sprintf("unexpected disk type: %s", diskType))
+		// Switch is intended to be exhaustive, reaching this case is a bug
+		panic(fmt.Sprintf(
+			"Switch is intended to be exhaustive, %s is not a valid switch case", diskType))
 	}
 
 	return false
@@ -69,7 +71,9 @@ func supportsAccessType(volumeCapability *csi.VolumeCapability, diskType common.
 	case common.DiskTypeFS:
 		return volumeCapability.GetBlock() == nil && volumeCapability.GetMount() != nil
 	default:
-		panic(fmt.Sprintf("unexpected disk type: %s", diskType))
+		// Switch is intended to be exhaustive, reaching this case is a bug
+		panic(fmt.Sprintf(
+			"Switch is intended to be exhaustive, %s is not a valid switch case", diskType))
 	}
 }
 
@@ -113,7 +117,9 @@ func getCapacity(diskType common.DiskType) (maxSize int64, minSize int64) {
 		maxSize = common.MaxFSSizeGiB * common.NumBytesInGiB
 		minSize = common.MinFSSizeGiB * common.NumBytesInGiB
 	default:
-		panic(fmt.Sprintf("unexpected disk type: %s", diskType))
+		// Switch is intended to be exhaustive, reaching this case is a bug
+		panic(fmt.Sprintf(
+			"Switch is intended to be exhaustive, %s is not a valid switch case", diskType))
 	}
 
 	return maxSize, minSize
@@ -165,6 +171,10 @@ func validateDiskRequest(request *csi.CreateVolumeRequest, diskType common.DiskT
 				requestedSizeBytes,
 				common.NumBytesInGiB)
 		}
+	default:
+		// Switch is intended to be exhaustive, reaching this case is a bug
+		panic(fmt.Sprintf(
+			"Switch is intended to be exhaustive, %s is not a valid switch case", diskType))
 	}
 
 	for _, capability := range request.GetVolumeCapabilities() {
@@ -218,6 +228,8 @@ func parseRequiredTopology(request *csi.CreateVolumeRequest,
 		// We did not find a topology segment with a location and a "supports-shared-disks" topology key
 		return "", false
 	default:
-		panic(fmt.Sprintf("unexpected disk type: %s", diskType))
+		// Switch is intended to be exhaustive, reaching this case is a bug
+		panic(fmt.Sprintf(
+			"Switch is intended to be exhaustive, %s is not a valid switch case", diskType))
 	}
 }
