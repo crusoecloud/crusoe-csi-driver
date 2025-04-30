@@ -5,14 +5,16 @@ before:
   hooks:
     - go mod tidy
 builds:
-  - main: ./cmd/crusoe-csi-driver/main.go
+  - id: crusoe-csi-driver
+    main: ./cmd/crusoe-csi-driver/main.go
     env:
       - CGO_ENABLED=0
     mod_timestamp: '{{.CommitTimestamp }}'
     flags:
         - -trimpath
     ldflags:
-      - "-X 'github.com/crusoecloud/crusoe-csi-driver/internal/driver.version={{ .Tag }}' -X 'github.com/crusoecloud/crusoe-csi-driver/internal/driver.name={{ .Env.CRUSOE_CSI_DRIVER_NAME }}'"
+      - |
+        -X github.com/crusoecloud/crusoe-csi-driver/internal/common.PluginVersion={{ .Tag }}
     goos:
       - linux
     goarch:
@@ -27,6 +29,7 @@ dockers:
       - "--pull"
       - "--platform=linux/amd64"
     dockerfile: Dockerfile.goreleaser
+    goarch: amd64
   - image_templates:
       - 'ghcr.io/crusoecloud/{{ .ProjectName }}:{{ .Tag }}-arm64'
     use: buildx

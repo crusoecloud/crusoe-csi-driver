@@ -14,9 +14,10 @@ import (
 
 //nolint:gochecknoglobals  // Global command instance
 var rootCmd = &cobra.Command{
-	Use:   "crusoe-csi-driver",
-	Short: "Crusoe Container Storage Interface (CSI) driver",
-	RunE:  internal.RunMain,
+	Use:          "crusoe-csi-driver",
+	Short:        "Crusoe Container Storage Interface (CSI) driver",
+	SilenceUsage: true, // Silence usage print if an error occurs
+	RunE:         internal.RunMain,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

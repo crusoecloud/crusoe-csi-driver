@@ -21,14 +21,15 @@ var ErrFailedResize = errors.New("failed to resize disk")
 
 type DefaultNode struct {
 	csi.UnimplementedNodeServer
-	CrusoeClient  *crusoeapi.APIClient
-	HostInstance  *crusoeapi.InstanceV1Alpha5
-	Mounter       *mount.SafeFormatAndMount
-	Resizer       *mount.ResizeFs
-	DiskType      common.DiskType
-	PluginName    string
-	PluginVersion string
-	Capabilities  []*csi.NodeServiceCapability
+	CrusoeClient      *crusoeapi.APIClient
+	HostInstance      *crusoeapi.InstanceV1Alpha5
+	Mounter           *mount.SafeFormatAndMount
+	Resizer           *mount.ResizeFs
+	DiskType          common.DiskType
+	PluginName        string
+	PluginVersion     string
+	Capabilities      []*csi.NodeServiceCapability
+	MaxVolumesPerNode int64
 }
 
 func (d *DefaultNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (
@@ -147,10 +148,8 @@ func (d *DefaultNode) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) 
 	}
 
 	return &csi.NodeGetInfoResponse{
-		NodeId: d.HostInstance.Id,
-		// Hard limit upstream, change if needed
-		// Subtract 1 to allow for the boot disk
-		MaxVolumesPerNode: common.MaxVolumesPerNode - 1,
+		NodeId:            d.HostInstance.Id,
+		MaxVolumesPerNode: d.MaxVolumesPerNode,
 		AccessibleTopology: &csi.Topology{
 			Segments: topologySegments,
 		},
