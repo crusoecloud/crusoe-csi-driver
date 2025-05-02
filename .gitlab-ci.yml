@@ -4,7 +4,7 @@ include:
 
 default:
   tags:
-    - gitlab-runner-gcp
+    - x86-crusoecloud_build_prod-docker-build
 
 variables:
   CI_IMAGE: registry.gitlab.com/crusoeenergy/tools/go-ci-1.23
