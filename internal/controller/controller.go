@@ -156,9 +156,10 @@ func (d *DefaultController) DeleteVolume(ctx context.Context,
 
 		return &csi.DeleteVolumeResponse{}, nil
 	} else if err != nil {
-		klog.Errorf("failed to check if disk exists: %s", err)
+		klog.Errorf("failed to check if disk %s exists: %s", request.GetVolumeId(), err)
 
-		return nil, status.Errorf(codes.FailedPrecondition, "failed to check if disk exists: %s", err)
+		return nil, status.Errorf(codes.FailedPrecondition, "failed to check if disk %s exists: %s",
+			request.GetVolumeId(), err)
 	}
 
 	if len(existingDisk.AttachedTo) > 0 {
@@ -174,9 +175,10 @@ func (d *DefaultController) DeleteVolume(ctx context.Context,
 
 	op, _, err := d.CrusoeClient.DisksApi.DeleteDisk(ctx, d.HostInstance.ProjectId, request.GetVolumeId())
 	if err != nil {
-		klog.Errorf("failed to delete disk: %s", common.UnpackSwaggerErr(err))
+		klog.Errorf("failed to delete disk %s: %s", request.GetVolumeId(), common.UnpackSwaggerErr(err))
 
-		return nil, status.Errorf(codes.Internal, "failed to delete disk: %s", common.UnpackSwaggerErr(err))
+		return nil, status.Errorf(codes.Internal, "failed to delete disk %s: %s",
+			request.GetVolumeId(), common.UnpackSwaggerErr(err))
 	}
 
 	_, awaitErr := common.AwaitOperation(ctx,
@@ -184,11 +186,13 @@ func (d *DefaultController) DeleteVolume(ctx context.Context,
 		d.HostInstance.ProjectId,
 		d.CrusoeClient.DiskOperationsApi.GetStorageDisksOperation)
 	if awaitErr != nil {
-		klog.Errorf("failed to get result of disk deletion: %s",
+		klog.Errorf("failed to get result of disk deletion for disk %s: %s",
+			request.GetVolumeId(),
 			common.UnpackSwaggerErr(awaitErr))
 
 		return nil, status.Errorf(codes.Internal,
-			"failed to get result of disk deletion: %s",
+			"failed to get result of disk deletion for disk %s: %s",
+			request.GetVolumeId(),
 			common.UnpackSwaggerErr(awaitErr))
 	}
 
@@ -211,9 +215,10 @@ func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
 		request.GetNodeId(),
 		d.HostInstance.ProjectId)
 	if err != nil {
-		klog.Errorf("failed to check if disk is attached to instance: %s", err)
+		klog.Errorf("failed to check if disk %s is attached to instance: %s", request.GetVolumeId(), err)
 
-		return nil, status.Errorf(codes.NotFound, "failed to check if disk is attached to instance: %s", err)
+		return nil, status.Errorf(codes.NotFound, "failed to check if disk %s is attached to instance: %s",
+			request.GetVolumeId(), err)
 	}
 
 	if attached {
@@ -240,9 +245,9 @@ func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
 		},
 	}, d.HostInstance.ProjectId, request.GetNodeId())
 	if err != nil {
-		klog.Errorf("failed to attach disk: %s", err)
+		klog.Errorf("failed to attach disk %s: %s", request.GetVolumeId(), err)
 
-		return nil, status.Errorf(codes.Internal, "failed to attach disk: %s", err)
+		return nil, status.Errorf(codes.Internal, "failed to attach disk %s: %s", request.GetVolumeId(), err)
 	}
 
 	_, err = common.AwaitOperation(ctx,
@@ -250,9 +255,11 @@ func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
 		d.HostInstance.ProjectId,
 		d.CrusoeClient.VMOperationsApi.GetComputeVMsInstancesOperation)
 	if err != nil {
-		klog.Errorf("failed to get result of disk attachment: %s", err)
+		klog.Errorf("failed to get result of disk attachment for disk %s: %s", request.GetVolumeId(), err)
 
-		return nil, status.Errorf(codes.Internal, "failed to get result of disk attachment: %s", err)
+		return nil, status.Errorf(codes.Internal, "failed to get result of disk attachment for disk %s: %s",
+			request.GetVolumeId(),
+			err)
 	}
 
 	klog.Infof("Published volume: %+v", request)
@@ -276,14 +283,18 @@ func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 	if err != nil {
 		if errors.Is(err, crusoe.ErrInstanceNotFound) {
 			// Instance does not exist
-			klog.Infof("Instance %s is already deleted, skipping unpublish", request.GetNodeId())
+			klog.Infof("Parent instance %s is already deleted, skipping unpublish for disk %s",
+				request.GetVolumeId(),
+				request.GetNodeId())
 
 			return &csi.ControllerUnpublishVolumeResponse{}, nil
 		}
 
-		klog.Errorf("failed to check if disk is attached to instance: %s", err)
+		klog.Errorf("failed to check if disk %s is attached to instance: %s", request.GetVolumeId(), err)
 
-		return nil, status.Errorf(codes.NotFound, "failed to check if disk is attached to instance: %s", err)
+		return nil, status.Errorf(codes.NotFound, "failed to check if disk %s is attached to instance: %s",
+			request.GetVolumeId(),
+			err)
 	}
 
 	if !attached {
@@ -301,9 +312,13 @@ func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 		},
 	}, d.HostInstance.ProjectId, request.GetNodeId())
 	if err != nil {
-		klog.Errorf("failed to detach disk: %s", err)
+		klog.Errorf("failed to detach disk %s: %s",
+			request.GetVolumeId(),
+			err)
 
-		return nil, status.Errorf(codes.Internal, "failed to detach disk: %s", err)
+		return nil, status.Errorf(codes.Internal, "failed to detach disk %s: %s",
+			request.GetVolumeId(),
+			err)
 	}
 
 	_, err = common.AwaitOperation(ctx,
@@ -311,9 +326,13 @@ func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 		d.HostInstance.ProjectId,
 		d.CrusoeClient.VMOperationsApi.GetComputeVMsInstancesOperation)
 	if err != nil {
-		klog.Errorf("failed to get result of disk detachment: %s", err)
+		klog.Errorf("failed to get result of disk detachment for disk %s: %s",
+			request.GetVolumeId(),
+			err)
 
-		return nil, status.Errorf(codes.Internal, "failed to get result of disk detachment: %s", err)
+		return nil, status.Errorf(codes.Internal, "failed to get result of disk detachment for disk %s: %s",
+			request.GetVolumeId(),
+			err)
 	}
 
 	klog.Infof("Unpublished volume: %+v", request)
@@ -405,9 +424,9 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 	// Find the existing disk
 	existingDisk, err := crusoe.FindDiskByIDFallible(ctx, d.CrusoeClient, d.HostInstance.ProjectId, request.GetVolumeId())
 	if err != nil {
-		klog.Errorf("failed to find disk: %s", err)
+		klog.Errorf("failed to find disk %s: %s", request.GetVolumeId(), err)
 
-		return nil, status.Errorf(codes.NotFound, "failed to find disk: %s", err)
+		return nil, status.Errorf(codes.NotFound, "failed to find disk %s: %s", request.GetVolumeId(), err)
 	}
 
 	// Only common.DiskTypeFS volumes can be expanded online
@@ -425,7 +444,7 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 
 	existingSizeGiB, err := crusoe.NormalizeDiskSizeToGiB(existingDisk)
 	if err != nil {
-		klog.Errorf("failed to normalize disk size: %s", err)
+		klog.Errorf("failed to normalize disk size for disk %s: %s", request.GetVolumeId(), err)
 
 		return nil, status.Errorf(codes.Internal, "failed to normalize disk size: %s", err)
 	}
@@ -434,13 +453,13 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 	// and to return an accurate error message
 	requestSizeBytes, err := common.RequestSizeToBytes(request.GetCapacityRange())
 	if err != nil {
-		klog.Errorf("failed to get request size: %s", err)
+		klog.Errorf("failed to get request size for disk %s: %s", request.GetVolumeId(), err)
 
 		return nil, status.Errorf(codes.OutOfRange, "failed to get request size: %s", err)
 	}
 	requestSizeGiB, err := common.RequestSizeToGiB(request.GetCapacityRange())
 	if err != nil {
-		klog.Errorf("failed to get request size: %s", err)
+		klog.Errorf("failed to get request size for disk %s: %s", request.GetVolumeId(), err)
 
 		return nil, status.Errorf(codes.OutOfRange, "failed to get request size: %s", err)
 	}
@@ -448,16 +467,16 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 	maxSizeBytes, minSizeBytes := getCapacity(d.DiskType)
 
 	if requestSizeBytes > maxSizeBytes {
-		klog.Errorf("%s: maximum size: %d, requested size: %d",
-			errDiskTooLarge, maxSizeBytes, requestSizeBytes)
+		klog.Errorf("%s: maximum size: %d, requested size: %d for disk %s",
+			errDiskTooLarge, maxSizeBytes, requestSizeBytes, request.GetVolumeId())
 
 		return nil, status.Errorf(codes.OutOfRange, "%s: maximum size: %d, requested size: %d",
 			errDiskTooLarge, maxSizeBytes, requestSizeBytes)
 	}
 
 	if requestSizeBytes < minSizeBytes {
-		klog.Errorf("%s: minimum size: %d, requested size: %d",
-			errDiskTooSmall, minSizeBytes, requestSizeBytes)
+		klog.Errorf("%s: minimum size: %d, requested size: %d for disk %s",
+			errDiskTooSmall, minSizeBytes, requestSizeBytes, request.GetVolumeId())
 
 		return nil, status.Errorf(codes.OutOfRange, "%s: minimum size: %d, requested size: %d",
 			errDiskTooSmall, minSizeBytes, requestSizeBytes)
@@ -480,7 +499,7 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 		Size: fmt.Sprintf("%dGiB", requestSizeGiB),
 	}, d.HostInstance.ProjectId, request.GetVolumeId())
 	if err != nil {
-		klog.Errorf("failed to resize disk: %s", common.UnpackSwaggerErr(err))
+		klog.Errorf("failed to resize disk %s: %s", request.GetVolumeId(), common.UnpackSwaggerErr(err))
 
 		return nil, status.Errorf(codes.Internal, "failed to resize disk: %s", common.UnpackSwaggerErr(err))
 	}
@@ -490,7 +509,8 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 		d.HostInstance.ProjectId,
 		d.CrusoeClient.DiskOperationsApi.GetStorageDisksOperation)
 	if err != nil {
-		klog.Errorf("failed to get result of disk resize: %s",
+		klog.Errorf("failed to get result of disk resize for disk %s: %s",
+			request.GetVolumeId(),
 			common.UnpackSwaggerErr(err))
 
 		return nil, status.Errorf(codes.Internal,

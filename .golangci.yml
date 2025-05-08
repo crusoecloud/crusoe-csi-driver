@@ -29,7 +29,10 @@ linters-settings:
   gomoddirectives:
     replace-allow-list:
       - github.com/crusoecloud/client-go
-
+  funlen:
+    lines: 80
+    statements: 80
+    ignore-comments: true
 linters:
   disable-all: true
   enable:
