@@ -149,7 +149,7 @@ func newCrusoeClientWithViperConfig(pluginName string, pluginVersion string) *cr
 	)
 }
 
-//nolint:funlen,cyclop // server instantiation is long
+//nolint:cyclop // server instantiation is long
 func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) {
 	serveIdentity := false
 	serveController := false
