@@ -36,6 +36,8 @@ func (d *DefaultNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeR
 	*csi.NodeStageVolumeResponse,
 	error,
 ) {
+	klog.Errorf("%s: NodeStageVolume", common.ErrNotImplemented)
+
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeStageVolume", common.ErrNotImplemented)
 }
 
@@ -43,6 +45,8 @@ func (d *DefaultNode) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVol
 	*csi.NodeUnstageVolumeResponse,
 	error,
 ) {
+	klog.Errorf("%s: NodeUnstageVolume", common.ErrNotImplemented)
+
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeUnstageVolume", common.ErrNotImplemented)
 }
 
@@ -62,6 +66,8 @@ func (d *DefaultNode) NodePublishVolume(_ context.Context, request *csi.NodePubl
 
 	err := nodePublishVolume(d.Mounter, d.Resizer, mountOpts, d.DiskType, request)
 	if err != nil {
+		klog.Errorf("failed to publish volume: %s", err.Error())
+
 		return nil, status.Errorf(codes.Internal, "failed to publish volume: %s", err.Error())
 	}
 
@@ -79,6 +85,8 @@ func (d *DefaultNode) NodeUnpublishVolume(_ context.Context, request *csi.NodeUn
 	targetPath := request.GetTargetPath()
 	err := mount.CleanupMountPoint(targetPath, d.Mounter, false)
 	if err != nil {
+		klog.Errorf("failed to cleanup mount point %s", err.Error())
+
 		return nil, status.Errorf(codes.Internal, "failed to cleanup mount point %s", err.Error())
 	}
 
@@ -91,6 +99,8 @@ func (d *DefaultNode) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolume
 	*csi.NodeGetVolumeStatsResponse,
 	error,
 ) {
+	klog.Errorf("%s: NodeGetVolumeStats", common.ErrNotImplemented)
+
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeGetVolumeStats", common.ErrNotImplemented)
 }
 
@@ -112,6 +122,8 @@ func (d *DefaultNode) NodeExpandVolume(ctx context.Context, request *csi.NodeExp
 	// Fetch disk's serial number because NodeExpandVolumeRequest does not include the volume context :(
 	disk, err := crusoe.FindDiskByIDFallible(ctx, d.CrusoeClient, d.HostInstance.ProjectId, request.GetVolumeId())
 	if err != nil {
+		klog.Errorf("failed to find disk: %s", err)
+
 		return nil, status.Errorf(codes.NotFound, "failed to find disk: %s", err)
 	}
 	devicePath := getSSDDevicePath(disk.SerialNumber)
@@ -122,6 +134,8 @@ func (d *DefaultNode) NodeExpandVolume(ctx context.Context, request *csi.NodeExp
 	}
 
 	if !ok {
+		klog.Errorf("%s: %s", ErrFailedResize, request.GetVolumePath())
+
 		return nil, fmt.Errorf("%w: %s", ErrFailedResize, request.GetVolumePath())
 	}
 

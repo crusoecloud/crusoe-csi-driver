@@ -52,12 +52,18 @@ func (d *DefaultController) CreateVolume(ctx context.Context, request *csi.Creat
 	existingDisk, err := crusoe.FindDiskByNameFallible(ctx, d.CrusoeClient, d.HostInstance.ProjectId, request.GetName())
 	if err != nil {
 		if !errors.Is(err, crusoe.ErrDiskNotFound) {
+			klog.Errorf("failed to check if disk exists: %s", err)
+
 			return nil, status.Errorf(codes.Internal, "failed to check if disk exists: %s", err)
 		}
 	}
 
 	diskLocation, requireSupportsFS := parseRequiredTopology(request, d.DiskType, d.PluginName, d.HostInstance)
 	if d.DiskType == common.DiskTypeFS && !requireSupportsFS {
+		klog.Errorf("shared disk requested but could not find topology constraint with %s and %s segments",
+			common.GetTopologyKey(d.PluginName, common.TopologyLocationKey),
+			common.GetTopologyKey(d.PluginName, common.TopologySupportsSharedDisksKey))
+
 		return nil, status.Errorf(codes.ResourceExhausted,
 			"shared disk requested but could not find topology constraint with %s and %s segments",
 			common.GetTopologyKey(d.PluginName, common.TopologyLocationKey),
@@ -66,6 +72,8 @@ func (d *DefaultController) CreateVolume(ctx context.Context, request *csi.Creat
 
 	diskRequest, err := crusoe.GetCreateDiskRequest(request, diskLocation, d.DiskType)
 	if err != nil {
+		klog.Errorf("failed to get create disk request: %s", err)
+
 		return nil, status.Errorf(codes.InvalidArgument, "failed to get create disk request: %s", err)
 	}
 
@@ -80,6 +88,10 @@ func (d *DefaultController) CreateVolume(ctx context.Context, request *csi.Creat
 		); diskMatchErr != nil {
 			// Disk does not match
 			// To be safe, do not modify or delete existing disk and return error
+			klog.Errorf("disk %s already exists but does not match request: %s",
+				request.GetName(),
+				diskMatchErr)
+
 			return nil, status.Errorf(codes.AlreadyExists,
 				"disk %s already exists but does not match request: %s",
 				request.GetName(),
@@ -93,6 +105,8 @@ func (d *DefaultController) CreateVolume(ctx context.Context, request *csi.Creat
 		// Create the disk
 		op, _, createErr := d.CrusoeClient.DisksApi.CreateDisk(ctx, *diskRequest, d.HostInstance.ProjectId)
 		if createErr != nil {
+			klog.Errorf("failed to create disk: %s", common.UnpackSwaggerErr(createErr))
+
 			return nil, status.Errorf(codes.Internal, "failed to create disk: %s", common.UnpackSwaggerErr(createErr))
 		}
 
@@ -102,6 +116,9 @@ func (d *DefaultController) CreateVolume(ctx context.Context, request *csi.Creat
 			d.HostInstance.ProjectId,
 			d.CrusoeClient.DiskOperationsApi.GetStorageDisksOperation)
 		if getResultErr != nil {
+			klog.Errorf("failed to get result of disk creation: %s",
+				common.UnpackSwaggerErr(getResultErr))
+
 			return nil, status.Errorf(codes.Internal,
 				"failed to get result of disk creation: %s",
 				common.UnpackSwaggerErr(getResultErr))
@@ -112,6 +129,8 @@ func (d *DefaultController) CreateVolume(ctx context.Context, request *csi.Creat
 
 	volume, convertDiskErr := crusoe.GetVolumeFromDisk(disk, d.PluginName, diskLocation, d.DiskType)
 	if convertDiskErr != nil {
+		klog.Errorf("failed to convert crusoe disk to kubernetes volume: %s", convertDiskErr)
+
 		return nil, status.Errorf(codes.Internal, "failed to convert crusoe disk to kubernetes volume: %s", convertDiskErr)
 	}
 
@@ -137,10 +156,16 @@ func (d *DefaultController) DeleteVolume(ctx context.Context,
 
 		return &csi.DeleteVolumeResponse{}, nil
 	} else if err != nil {
+		klog.Errorf("failed to check if disk exists: %s", err)
+
 		return nil, status.Errorf(codes.FailedPrecondition, "failed to check if disk exists: %s", err)
 	}
 
 	if len(existingDisk.AttachedTo) > 0 {
+		klog.Errorf("disk %s is still attached to instance(s): %v",
+			request.GetVolumeId(),
+			existingDisk.AttachedTo)
+
 		return nil, status.Errorf(codes.FailedPrecondition,
 			"disk %s is still attached to instance(s): %v",
 			request.GetVolumeId(),
@@ -149,6 +174,8 @@ func (d *DefaultController) DeleteVolume(ctx context.Context,
 
 	op, _, err := d.CrusoeClient.DisksApi.DeleteDisk(ctx, d.HostInstance.ProjectId, request.GetVolumeId())
 	if err != nil {
+		klog.Errorf("failed to delete disk: %s", common.UnpackSwaggerErr(err))
+
 		return nil, status.Errorf(codes.Internal, "failed to delete disk: %s", common.UnpackSwaggerErr(err))
 	}
 
@@ -157,6 +184,9 @@ func (d *DefaultController) DeleteVolume(ctx context.Context,
 		d.HostInstance.ProjectId,
 		d.CrusoeClient.DiskOperationsApi.GetStorageDisksOperation)
 	if awaitErr != nil {
+		klog.Errorf("failed to get result of disk deletion: %s",
+			common.UnpackSwaggerErr(awaitErr))
+
 		return nil, status.Errorf(codes.Internal,
 			"failed to get result of disk deletion: %s",
 			common.UnpackSwaggerErr(awaitErr))
@@ -181,6 +211,8 @@ func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
 		request.GetNodeId(),
 		d.HostInstance.ProjectId)
 	if err != nil {
+		klog.Errorf("failed to check if disk is attached to instance: %s", err)
+
 		return nil, status.Errorf(codes.NotFound, "failed to check if disk is attached to instance: %s", err)
 	}
 
@@ -208,6 +240,8 @@ func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
 		},
 	}, d.HostInstance.ProjectId, request.GetNodeId())
 	if err != nil {
+		klog.Errorf("failed to attach disk: %s", err)
+
 		return nil, status.Errorf(codes.Internal, "failed to attach disk: %s", err)
 	}
 
@@ -216,6 +250,8 @@ func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
 		d.HostInstance.ProjectId,
 		d.CrusoeClient.VMOperationsApi.GetComputeVMsInstancesOperation)
 	if err != nil {
+		klog.Errorf("failed to get result of disk attachment: %s", err)
+
 		return nil, status.Errorf(codes.Internal, "failed to get result of disk attachment: %s", err)
 	}
 
@@ -245,6 +281,8 @@ func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 			return &csi.ControllerUnpublishVolumeResponse{}, nil
 		}
 
+		klog.Errorf("failed to check if disk is attached to instance: %s", err)
+
 		return nil, status.Errorf(codes.NotFound, "failed to check if disk is attached to instance: %s", err)
 	}
 
@@ -263,6 +301,8 @@ func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 		},
 	}, d.HostInstance.ProjectId, request.GetNodeId())
 	if err != nil {
+		klog.Errorf("failed to detach disk: %s", err)
+
 		return nil, status.Errorf(codes.Internal, "failed to detach disk: %s", err)
 	}
 
@@ -271,6 +311,8 @@ func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 		d.HostInstance.ProjectId,
 		d.CrusoeClient.VMOperationsApi.GetComputeVMsInstancesOperation)
 	if err != nil {
+		klog.Errorf("failed to get result of disk detachment: %s", err)
+
 		return nil, status.Errorf(codes.Internal, "failed to get result of disk detachment: %s", err)
 	}
 
@@ -363,11 +405,17 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 	// Find the existing disk
 	existingDisk, err := crusoe.FindDiskByIDFallible(ctx, d.CrusoeClient, d.HostInstance.ProjectId, request.GetVolumeId())
 	if err != nil {
+		klog.Errorf("failed to find disk: %s", err)
+
 		return nil, status.Errorf(codes.NotFound, "failed to find disk: %s", err)
 	}
 
 	// Only common.DiskTypeFS volumes can be expanded online
 	if d.DiskType != common.DiskTypeFS && len(existingDisk.AttachedTo) != 0 {
+		klog.Errorf("volume %s is attached to node %s",
+			request.GetVolumeId(),
+			existingDisk.AttachedTo[0])
+
 		return nil, status.Errorf(
 			codes.FailedPrecondition,
 			"volume %s is attached to node %s",
@@ -377,6 +425,8 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 
 	existingSizeGiB, err := crusoe.NormalizeDiskSizeToGiB(existingDisk)
 	if err != nil {
+		klog.Errorf("failed to normalize disk size: %s", err)
+
 		return nil, status.Errorf(codes.Internal, "failed to normalize disk size: %s", err)
 	}
 
@@ -384,21 +434,31 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 	// and to return an accurate error message
 	requestSizeBytes, err := common.RequestSizeToBytes(request.GetCapacityRange())
 	if err != nil {
+		klog.Errorf("failed to get request size: %s", err)
+
 		return nil, status.Errorf(codes.OutOfRange, "failed to get request size: %s", err)
 	}
 	requestSizeGiB, err := common.RequestSizeToGiB(request.GetCapacityRange())
 	if err != nil {
+		klog.Errorf("failed to get request size: %s", err)
+
 		return nil, status.Errorf(codes.OutOfRange, "failed to get request size: %s", err)
 	}
 
 	maxSizeBytes, minSizeBytes := getCapacity(d.DiskType)
 
 	if requestSizeBytes > maxSizeBytes {
+		klog.Errorf("%s: maximum size: %d, requested size: %d",
+			errDiskTooLarge, maxSizeBytes, requestSizeBytes)
+
 		return nil, status.Errorf(codes.OutOfRange, "%s: maximum size: %d, requested size: %d",
 			errDiskTooLarge, maxSizeBytes, requestSizeBytes)
 	}
 
 	if requestSizeBytes < minSizeBytes {
+		klog.Errorf("%s: minimum size: %d, requested size: %d",
+			errDiskTooSmall, minSizeBytes, requestSizeBytes)
+
 		return nil, status.Errorf(codes.OutOfRange, "%s: minimum size: %d, requested size: %d",
 			errDiskTooSmall, minSizeBytes, requestSizeBytes)
 	}
@@ -420,6 +480,8 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 		Size: fmt.Sprintf("%dGiB", requestSizeGiB),
 	}, d.HostInstance.ProjectId, request.GetVolumeId())
 	if err != nil {
+		klog.Errorf("failed to resize disk: %s", common.UnpackSwaggerErr(err))
+
 		return nil, status.Errorf(codes.Internal, "failed to resize disk: %s", common.UnpackSwaggerErr(err))
 	}
 
@@ -428,7 +490,11 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 		d.HostInstance.ProjectId,
 		d.CrusoeClient.DiskOperationsApi.GetStorageDisksOperation)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get result of disk resize: %s", common.UnpackSwaggerErr(err))
+		klog.Errorf("failed to get result of disk resize: %s",
+			common.UnpackSwaggerErr(err))
+
+		return nil, status.Errorf(codes.Internal,
+			"failed to get result of disk resize: %s", common.UnpackSwaggerErr(err))
 	}
 
 	klog.Infof("Resized disk %s to %d GiB", request.GetVolumeId(), requestSizeGiB)
