@@ -412,15 +412,15 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 
 	// Only common.DiskTypeFS volumes can be expanded online
 	if d.DiskType != common.DiskTypeFS && len(existingDisk.AttachedTo) != 0 {
-		klog.Errorf("volume %s is attached to node %s",
+		klog.Errorf("offline volume expansion failed: volume %s is attached to one or more nodes: %v",
 			request.GetVolumeId(),
-			existingDisk.AttachedTo[0])
+			existingDisk.AttachedTo)
 
 		return nil, status.Errorf(
 			codes.FailedPrecondition,
-			"volume %s is attached to node %s",
+			"offline volume expansion failed: volume %s is attached to one or more nodes: %v",
 			request.GetVolumeId(),
-			existingDisk.AttachedTo[0])
+			existingDisk.AttachedTo)
 	}
 
 	existingSizeGiB, err := crusoe.NormalizeDiskSizeToGiB(existingDisk)
@@ -497,7 +497,7 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 			"failed to get result of disk resize: %s", common.UnpackSwaggerErr(err))
 	}
 
-	klog.Infof("Resized disk %s to %d GiB", request.GetVolumeId(), requestSizeGiB)
+	klog.Infof("Resized volume %s to %d GiB", request.GetVolumeId(), requestSizeGiB)
 
 	return &csi.ControllerExpandVolumeResponse{
 		CapacityBytes:         int64(requestSizeGiB) * common.NumBytesInGiB,
