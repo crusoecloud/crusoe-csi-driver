@@ -47,8 +47,8 @@ var SelectedCSIDriverType = CSIDriverTypeSSD //nolint:gochecknoglobals // flag v
 
 const (
 	CrusoeAPIEndpointFlag = "crusoe-api-endpoint"
-	CrusoeAccessKeyFlag   = "crusoe-csi-access-key"
-	CrusoeSecretKeyFlag   = "crusoe-csi-secret-key" //nolint:gosec // false positive, this is a flag name
+	CrusoeAccessKeyFlag   = "crusoe-access-key"
+	CrusoeSecretKeyFlag   = "crusoe-secret-key"
 	CrusoeProjectIDFlag   = "crusoe-project-id"
 	CSIDriverTypeFlag     = "crusoe-csi-driver-type"
 	ServicesFlag          = "services"
