@@ -1,6 +1,9 @@
 package common
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Numeric constants.
 const (
@@ -66,3 +69,7 @@ const (
 	// ref: https://docs.crusoecloud.com/storage/disks/overview#persistent-disks
 	MaxDiskNameLength = 63
 )
+
+func UserAgent() string {
+	return fmt.Sprintf("%s/%s", PluginName, PluginVersion)
+}
