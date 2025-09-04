@@ -257,6 +257,12 @@ func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptC
 		return fmt.Errorf("failed to get host instance: %w", err)
 	}
 
+	// hostInstance := &crusoeapi.InstanceV1Alpha5{
+	//	Id:        "test_id",
+	//	ProjectId: "test_project_Id",
+	//	Location:  "test_location",
+	//}
+
 	klog.Infof("Crusoe host instance ID: %+v", hostInstance.Id)
 
 	srv := grpc.NewServer(grpc.ConnectionTimeout(gracefulTimeoutDuration))
