@@ -27,12 +27,15 @@ const (
 )
 
 var (
+	ErrFailedToFetchNFSFlag = errors.New("failed to fetch NFS flag")
+
 	ErrUnexpectedVolumeCapability = errors.New("unexpected volume capability")
 	ErrVolumeMissingSerialNumber  = fmt.Errorf(
 		"volume missing serial number context key %s",
 		common.VolumeContextDiskSerialNumberKey)
 	ErrVolumeMissingName = fmt.Errorf("volume missing name context key %s", common.VolumeContextDiskNameKey)
 	ErrFailedMount       = errors.New("failed to mount volume")
+	ErrFailedResize      = errors.New("failed to resize disk")
 )
 
 func getNFSFSDevicePath(fsDevicePath string) string {
@@ -81,12 +84,11 @@ func supportsFS(node *crusoeapi.InstanceV1Alpha5) bool {
 }
 
 func nodePublishVolume(
-	crusoeHTTPClient *http.Client,
-	crusoeAPIEndpoint string,
 	mounter *mount.SafeFormatAndMount,
 	resizer *mount.ResizeFs,
 	mountOpts []string,
 	diskType common.DiskType,
+	nfsEnabled bool,
 	request *csi.NodePublishVolumeRequest,
 ) error {
 	volumeContext := request.GetVolumeContext()
@@ -126,23 +128,15 @@ func nodePublishVolume(
 			Request:    request,
 		}.Publish()
 	case request.GetVolumeCapability().GetMount() != nil:
-
-		foo := PublishFilesystem{
-			CrusoeHTTPClient:  crusoeHTTPClient,
-			CrusoeAPIEndpoint: crusoeAPIEndpoint,
-			DevicePath:        devicePath,
-			SerialNumber:      serialNumber,
-			Mounter:           mounter,
-			Resizer:           resizer,
-			MountOpts:         mountOpts,
-			DiskType:          diskType,
-			Request:           request,
-		}
-
-		// TODO: fixme
-		_ = foo.Publish()
-
-		return nodePublishFilesystemVolume(serialNumber, mounter, resizer, mountOpts, diskType, request)
+		return PublishFilesystem{
+			DevicePath: devicePath,
+			Mounter:    mounter,
+			Resizer:    resizer,
+			MountOpts:  mountOpts,
+			DiskType:   diskType,
+			NfsEnabled: nfsEnabled,
+			Request:    request,
+		}.Publish()
 	default:
 		return fmt.Errorf("%w: %s", ErrUnexpectedVolumeCapability, request.GetVolumeCapability())
 	}

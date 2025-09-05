@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -17,8 +16,6 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/mount-utils"
 )
-
-var ErrFailedResize = errors.New("failed to resize disk")
 
 type DefaultNode struct {
 	csi.UnimplementedNodeServer
@@ -67,7 +64,19 @@ func (d *DefaultNode) NodePublishVolume(_ context.Context, request *csi.NodePubl
 		mountOpts = append(mountOpts, readOnlyMountOption, noLoadMountOption)
 	}
 
-	err := nodePublishVolume(d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.Mounter, d.Resizer, mountOpts, d.DiskType, request)
+	nfsEnabled := false
+
+	if d.DiskType == common.DiskTypeFS {
+		var err error
+		nfsEnabled, err = crusoe.GetNFSFlag(d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
+		if err != nil {
+			klog.Errorf("%s: %s", ErrFailedToFetchNFSFlag, err)
+
+			return nil, status.Errorf(codes.Internal, "%s: %s", ErrFailedToFetchNFSFlag, err)
+		}
+	}
+
+	err := nodePublishVolume(d.Mounter, d.Resizer, mountOpts, d.DiskType, nfsEnabled, request)
 	if err != nil {
 		klog.Errorf("failed to publish volume %s: %s", request.GetVolumeId(), err.Error())
 
