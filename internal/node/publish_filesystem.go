@@ -1,25 +1,12 @@
 package node
 
 import (
-	"errors"
 	"fmt"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 	"k8s.io/mount-utils"
-	"net/http"
 	"os"
 )
-
-type PublishFilesystem struct {
-	CrusoeHTTPClient  http.Client
-	CrusoeAPIEndpoint string
-	SerialNumber      string
-	Mounter           *mount.SafeFormatAndMount
-	Resizer           *mount.ResizeFs
-	MountOpts         []string
-	DiskType          common.DiskType
-	Request           *csi.NodePublishVolumeRequest
-}
 
 func nfsFSMountHelper(devicePath string,
 	mounter *mount.SafeFormatAndMount,
@@ -128,32 +115,6 @@ func nodePublishFilesystemVolume(serialNumber string,
 		}
 	case common.DiskTypeSSD:
 		devicePath = getSSDDevicePath(serialNumber)
-	}
-
-	// Idempotency check: exit early if the disk is already mounted to the target path
-	verifyErr := verifyMountedVolumeWithUtils(mounter, request.GetTargetPath(), devicePath)
-
-	switch {
-	// Disk is already mounted to the target path, exit early
-	case verifyErr == nil:
-		{
-			return nil
-		}
-	// Nothing is mounted at the target path, continue mounting the disk
-	case errors.Is(verifyErr, errNothingMounted):
-		{
-		}
-	// Another disk is mounted at the target path, unmount the existing disk and continue mounting the disk
-	case errors.Is(verifyErr, errDeviceMismatch):
-		{
-			unmountErr := mounter.Unmount(request.GetTargetPath())
-			if unmountErr != nil {
-				return fmt.Errorf("failed to cleanup existing mount at %s", request.GetTargetPath())
-			}
-		}
-	// Failed to verify mounted volume
-	default:
-		return verifyErr
 	}
 
 	// Make parent directory for target path

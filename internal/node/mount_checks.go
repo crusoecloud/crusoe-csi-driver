@@ -34,8 +34,7 @@ func isMountPointQuick(mounter *mount.SafeFormatAndMount, targetPath string) (bo
 	return isMountPoint, nil
 }
 
-// verifyMountedVolumeWithUtils checks if the desired volume is mounted at the target path
-func verifyMountedVolumeWithUtils(mounter *mount.SafeFormatAndMount, targetPath, deviceFullPath string) error {
+func verifyMountedVolumeWithUtilsHelper(mounter *mount.SafeFormatAndMount, targetPath, deviceFullPath string) error {
 	isMountPoint, err := isMountPointQuick(mounter, targetPath)
 	if err != nil {
 		return fmt.Errorf("failed to check if target path %s is a mount point: %w", targetPath, err)
@@ -60,4 +59,37 @@ func verifyMountedVolumeWithUtils(mounter *mount.SafeFormatAndMount, targetPath,
 	}
 
 	return nil
+}
+
+// verifyMountedVolumeWithUtils checks if the desired volume is mounted at the target path
+func verifyMountedVolumeWithUtils(mounter *mount.SafeFormatAndMount, targetPath string, deviceFullPath string) (bool, error) {
+	// Idempotency check: exit early if the disk is already mounted to the target path
+	verifyErr := verifyMountedVolumeWithUtilsHelper(mounter, targetPath, deviceFullPath)
+
+	switch {
+	// Disk is already mounted to the target path, exit early
+	case verifyErr == nil:
+		{
+			return true, nil
+		}
+	// Nothing is mounted at the target path, continue mounting the disk
+	case errors.Is(verifyErr, errNothingMounted):
+		{
+			return false, nil
+		}
+	// Another disk is mounted at the target path, unmount the existing disk and continue mounting the disk
+	case errors.Is(verifyErr, errDeviceMismatch):
+		{
+			unmountErr := mounter.Unmount(targetPath)
+			if unmountErr != nil {
+				return false, fmt.Errorf("failed to cleanup existing mount at %s", targetPath)
+			}
+
+			return false, nil
+		}
+	// Failed to verify mounted volume
+	default:
+		return false, verifyErr
+	}
+
 }

@@ -224,17 +224,17 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 
 		// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
 		csi.RegisterNodeServer(grpcServer, &node.DefaultNode{
-			CrusoeClient:           newCrusoeClientWithViperConfig(),
-			CustomCrusoeHTTPClient: newCrusoeHTTPClientWithViperConfig(),
-			CrusoeAPIEndpoint:      viper.GetString(CrusoeAPIEndpointFlag),
-			HostInstance:           hostInstance,
-			Capabilities:           capabilities,
-			MaxVolumesPerNode:      maxVolumesPerNode,
-			Mounter:                mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
-			Resizer:                mount.NewResizeFs(exec.New()),
-			DiskType:               common.PluginDiskType,
-			PluginName:             common.PluginName,
-			PluginVersion:          common.PluginVersion,
+			CrusoeClient:      newCrusoeClientWithViperConfig(),
+			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
+			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
+			HostInstance:      hostInstance,
+			Capabilities:      capabilities,
+			MaxVolumesPerNode: maxVolumesPerNode,
+			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
+			Resizer:           mount.NewResizeFs(exec.New()),
+			DiskType:          common.PluginDiskType,
+			PluginName:        common.PluginName,
+			PluginVersion:     common.PluginVersion,
 		})
 	}
 }

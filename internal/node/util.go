@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"k8s.io/mount-utils"
+	"net/http"
 	"strings"
 
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
@@ -79,7 +80,10 @@ func supportsFS(node *crusoeapi.InstanceV1Alpha5) bool {
 	return false
 }
 
-func nodePublishVolume(mounter *mount.SafeFormatAndMount,
+func nodePublishVolume(
+	crusoeHTTPClient *http.Client,
+	crusoeAPIEndpoint string,
+	mounter *mount.SafeFormatAndMount,
 	resizer *mount.ResizeFs,
 	mountOpts []string,
 	diskType common.DiskType,
@@ -91,15 +95,53 @@ func nodePublishVolume(mounter *mount.SafeFormatAndMount,
 		return ErrVolumeMissingSerialNumber
 	}
 
+	var devicePath string
+
+	switch diskType {
+	case common.DiskTypeFS:
+		var err error
+		devicePath, err = getFSDevicePath(request)
+		if err != nil {
+			return fmt.Errorf("failed to get device path: %w", err)
+		}
+	case common.DiskTypeSSD:
+		devicePath = getSSDDevicePath(serialNumber)
+	}
+
+	alreadyMounted, checkErr := verifyMountedVolumeWithUtils(d.Mounter, request.GetTargetPath(), devicePath)
+	if checkErr != nil {
+		return fmt.Errorf("failed to verify if volume is already mounted: %w", checkErr)
+	}
+
+	if alreadyMounted {
+		return nil
+	}
+
 	switch {
 	case request.GetVolumeCapability().GetBlock() != nil:
 		return PublishBlock{
-			SerialNumber: serialNumber,
-			Mounter:      mounter,
-			MountOpts:    mountOpts,
-			Request:      request,
+			DevicePath: devicePath,
+			Mounter:    mounter,
+			MountOpts:  mountOpts,
+			Request:    request,
 		}.Publish()
 	case request.GetVolumeCapability().GetMount() != nil:
+
+		foo := PublishFilesystem{
+			CrusoeHTTPClient:  crusoeHTTPClient,
+			CrusoeAPIEndpoint: crusoeAPIEndpoint,
+			DevicePath:        devicePath,
+			SerialNumber:      serialNumber,
+			Mounter:           mounter,
+			Resizer:           resizer,
+			MountOpts:         mountOpts,
+			DiskType:          diskType,
+			Request:           request,
+		}
+
+		// TODO: fixme
+		_ = foo.Publish()
+
 		return nodePublishFilesystemVolume(serialNumber, mounter, resizer, mountOpts, diskType, request)
 	default:
 		return fmt.Errorf("%w: %s", ErrUnexpectedVolumeCapability, request.GetVolumeCapability())

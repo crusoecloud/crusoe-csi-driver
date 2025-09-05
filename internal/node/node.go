@@ -22,17 +22,17 @@ var ErrFailedResize = errors.New("failed to resize disk")
 
 type DefaultNode struct {
 	csi.UnimplementedNodeServer
-	CrusoeClient           *crusoeapi.APIClient
-	CustomCrusoeHTTPClient *http.Client
-	CrusoeAPIEndpoint      string
-	HostInstance           *crusoeapi.InstanceV1Alpha5
-	Mounter                *mount.SafeFormatAndMount
-	Resizer                *mount.ResizeFs
-	DiskType               common.DiskType
-	PluginName             string
-	PluginVersion          string
-	Capabilities           []*csi.NodeServiceCapability
-	MaxVolumesPerNode      int64
+	CrusoeClient      *crusoeapi.APIClient
+	CrusoeHTTPClient  *http.Client
+	CrusoeAPIEndpoint string
+	HostInstance      *crusoeapi.InstanceV1Alpha5
+	Mounter           *mount.SafeFormatAndMount
+	Resizer           *mount.ResizeFs
+	DiskType          common.DiskType
+	PluginName        string
+	PluginVersion     string
+	Capabilities      []*csi.NodeServiceCapability
+	MaxVolumesPerNode int64
 }
 
 func (d *DefaultNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (
@@ -67,7 +67,7 @@ func (d *DefaultNode) NodePublishVolume(_ context.Context, request *csi.NodePubl
 		mountOpts = append(mountOpts, readOnlyMountOption, noLoadMountOption)
 	}
 
-	err := nodePublishVolume(d.Mounter, d.Resizer, mountOpts, d.DiskType, request)
+	err := nodePublishVolume(d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.Mounter, d.Resizer, mountOpts, d.DiskType, request)
 	if err != nil {
 		klog.Errorf("failed to publish volume %s: %s", request.GetVolumeId(), err.Error())
 
