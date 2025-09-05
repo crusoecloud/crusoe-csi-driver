@@ -6,10 +6,19 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 	"k8s.io/mount-utils"
+	"net/http"
 	"os"
 )
 
 type PublishFilesystem struct {
+	CrusoeHTTPClient  http.Client
+	CrusoeAPIEndpoint string
+	SerialNumber      string
+	Mounter           *mount.SafeFormatAndMount
+	Resizer           *mount.ResizeFs
+	MountOpts         []string
+	DiskType          common.DiskType
+	Request           *csi.NodePublishVolumeRequest
 }
 
 func nfsFSMountHelper(devicePath string,

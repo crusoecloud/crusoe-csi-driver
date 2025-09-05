@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -140,13 +141,17 @@ func listen() (net.Listener, error) {
 }
 
 //nolint:gocritic // don't combine parameter types
-func newCrusoeClientWithViperConfig(pluginName string, pluginVersion string) *crusoeapi.APIClient {
+func newCrusoeClientWithViperConfig() *crusoeapi.APIClient {
 	return crusoe.NewCrusoeClient(
 		viper.GetString(CrusoeAPIEndpointFlag),
 		viper.GetString(CrusoeAccessKeyFlag),
 		viper.GetString(CrusoeSecretKeyFlag),
-		fmt.Sprintf("%s/%s", pluginName, pluginVersion),
+		common.UserAgent(),
 	)
+}
+
+func newCrusoeHTTPClientWithViperConfig() *http.Client {
+	return crusoe.NewCrusoeHTTPClient(viper.GetString(CrusoeAccessKeyFlag), viper.GetString(CrusoeSecretKeyFlag))
 }
 
 //nolint:cyclop // server instantiation is long
@@ -193,7 +198,7 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 		capabilities := common.BaseControllerCapabilities
 
 		csi.RegisterControllerServer(grpcServer, &controller.DefaultController{
-			CrusoeClient:  newCrusoeClientWithViperConfig(common.PluginName, common.PluginVersion),
+			CrusoeClient:  newCrusoeClientWithViperConfig(),
 			HostInstance:  hostInstance,
 			Capabilities:  capabilities,
 			DiskType:      common.PluginDiskType,
@@ -219,18 +224,17 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 
 		// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
 		csi.RegisterNodeServer(grpcServer, &node.DefaultNode{
-			CrusoeClient:      newCrusoeClientWithViperConfig(common.PluginName, common.PluginVersion),
-			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
-			CrusoeAPIKey:      viper.GetString(CrusoeAccessKeyFlag),
-			CrusoeAPISecret:   viper.GetString(CrusoeSecretKeyFlag),
-			HostInstance:      hostInstance,
-			Capabilities:      capabilities,
-			MaxVolumesPerNode: maxVolumesPerNode,
-			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
-			Resizer:           mount.NewResizeFs(exec.New()),
-			DiskType:          common.PluginDiskType,
-			PluginName:        common.PluginName,
-			PluginVersion:     common.PluginVersion,
+			CrusoeClient:           newCrusoeClientWithViperConfig(),
+			CustomCrusoeHTTPClient: newCrusoeHTTPClientWithViperConfig(),
+			CrusoeAPIEndpoint:      viper.GetString(CrusoeAPIEndpointFlag),
+			HostInstance:           hostInstance,
+			Capabilities:           capabilities,
+			MaxVolumesPerNode:      maxVolumesPerNode,
+			Mounter:                mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
+			Resizer:                mount.NewResizeFs(exec.New()),
+			DiskType:               common.PluginDiskType,
+			PluginName:             common.PluginName,
+			PluginVersion:          common.PluginVersion,
 		})
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 
 	"github.com/crusoecloud/crusoe-csi-driver/internal/crusoe"
@@ -21,18 +22,17 @@ var ErrFailedResize = errors.New("failed to resize disk")
 
 type DefaultNode struct {
 	csi.UnimplementedNodeServer
-	CrusoeClient      *crusoeapi.APIClient
-	CrusoeAPIEndpoint string
-	CrusoeAPIKey      string
-	CrusoeAPISecret   string
-	HostInstance      *crusoeapi.InstanceV1Alpha5
-	Mounter           *mount.SafeFormatAndMount
-	Resizer           *mount.ResizeFs
-	DiskType          common.DiskType
-	PluginName        string
-	PluginVersion     string
-	Capabilities      []*csi.NodeServiceCapability
-	MaxVolumesPerNode int64
+	CrusoeClient           *crusoeapi.APIClient
+	CustomCrusoeHTTPClient *http.Client
+	CrusoeAPIEndpoint      string
+	HostInstance           *crusoeapi.InstanceV1Alpha5
+	Mounter                *mount.SafeFormatAndMount
+	Resizer                *mount.ResizeFs
+	DiskType               common.DiskType
+	PluginName             string
+	PluginVersion          string
+	Capabilities           []*csi.NodeServiceCapability
+	MaxVolumesPerNode      int64
 }
 
 func (d *DefaultNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (

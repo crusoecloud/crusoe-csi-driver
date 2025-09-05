@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 )
 
 const nfsFlagRouteTemplate = "%s/projects/%s/storage/nfs/is-using-nfs"
@@ -14,20 +13,10 @@ type NfsFlagResponse struct {
 	Status bool `json:"status"`
 }
 
-var customClient *http.Client
-var customClientLock sync.Mutex
-
 // GetNFSFlag returns true if the project has NFS enabled
-func GetNFSFlag(apiEndpoint string, projectID string, apiKey string, apiSecret string) (bool, error) {
-	customClientLock.Lock()
-	if customClient == nil {
-		customClient = &http.Client{}
-		customClient.Transport = NewAuthenticatingTransport(nil, apiKey, apiSecret)
-	}
-	customClientLock.Unlock()
-
+func GetNFSFlag(crusoeHTTPClient *http.Client, apiEndpoint string, projectID string) (bool, error) {
 	nfsFlagRoute := fmt.Sprintf(nfsFlagRouteTemplate, apiEndpoint, projectID)
-	resp, err := customClient.Get(nfsFlagRoute)
+	resp, err := crusoeHTTPClient.Get(nfsFlagRoute)
 	if err != nil {
 		return false, err
 	}
