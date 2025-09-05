@@ -220,6 +220,9 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 		// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
 		csi.RegisterNodeServer(grpcServer, &node.DefaultNode{
 			CrusoeClient:      newCrusoeClientWithViperConfig(common.PluginName, common.PluginVersion),
+			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
+			CrusoeAPIKey:      viper.GetString(CrusoeAccessKeyFlag),
+			CrusoeAPISecret:   viper.GetString(CrusoeSecretKeyFlag),
 			HostInstance:      hostInstance,
 			Capabilities:      capabilities,
 			MaxVolumesPerNode: maxVolumesPerNode,

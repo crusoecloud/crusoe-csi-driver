@@ -17,9 +17,12 @@ const (
 	newDirPerms          = 0o755 // this represents: rwxr-xr-x
 	newFilePerms         = 0o644 // this represents: rw-r--r--
 	expectedTypeSegments = 2
-	fsDiskFilesystem     = "virtiofs"
+	nfsFilesystem        = "nfs"
+	virtioFilesystem     = "virtiofs"
 	readOnlyMountOption  = "ro"
 	noLoadMountOption    = "noload"
+	nfsStaticRemotePorts = "100.64.0.2-100.64.0.17"
+	nfsStaticIP          = "100.64.0.2"
 )
 
 var (
@@ -30,6 +33,20 @@ var (
 	ErrVolumeMissingName = fmt.Errorf("volume missing name context key %s", common.VolumeContextDiskNameKey)
 	ErrFailedMount       = errors.New("failed to mount volume")
 )
+
+func getNFSFSDevicePath(fsDevicePath string) string {
+	return fmt.Sprintf("%s:/volumes/%s", nfsStaticIP, fsDevicePath)
+}
+
+func getFSDevicePath(request *csi.NodePublishVolumeRequest) (string, error) {
+	volumeContext := request.GetVolumeContext()
+	devicePath, ok := volumeContext[common.VolumeContextDiskNameKey]
+	if !ok {
+		return "", ErrVolumeMissingName
+	}
+
+	return devicePath, nil
+}
 
 func getSSDDevicePath(serialNumber string) string {
 	// symlink: /dev/disk/by-id/virtio-<serial-number>
@@ -76,7 +93,12 @@ func nodePublishVolume(mounter *mount.SafeFormatAndMount,
 
 	switch {
 	case request.GetVolumeCapability().GetBlock() != nil:
-		return nodePublishBlockVolume(serialNumber, mounter, mountOpts, request)
+		return PublishBlock{
+			SerialNumber: serialNumber,
+			Mounter:      mounter,
+			MountOpts:    mountOpts,
+			Request:      request,
+		}.Publish()
 	case request.GetVolumeCapability().GetMount() != nil:
 		return nodePublishFilesystemVolume(serialNumber, mounter, resizer, mountOpts, diskType, request)
 	default:

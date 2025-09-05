@@ -22,6 +22,9 @@ var ErrFailedResize = errors.New("failed to resize disk")
 type DefaultNode struct {
 	csi.UnimplementedNodeServer
 	CrusoeClient      *crusoeapi.APIClient
+	CrusoeAPIEndpoint string
+	CrusoeAPIKey      string
+	CrusoeAPISecret   string
 	HostInstance      *crusoeapi.InstanceV1Alpha5
 	Mounter           *mount.SafeFormatAndMount
 	Resizer           *mount.ResizeFs
