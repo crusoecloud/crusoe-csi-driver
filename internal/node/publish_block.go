@@ -3,10 +3,11 @@ package node
 import (
 	"errors"
 	"fmt"
-	"github.com/container-storage-interface/spec/lib/go/csi"
-	"k8s.io/mount-utils"
 	"os"
 	"path/filepath"
+
+	"github.com/container-storage-interface/spec/lib/go/csi"
+	"k8s.io/mount-utils"
 )
 
 type PublishBlock struct {
@@ -42,7 +43,7 @@ func (p PublishBlock) Publish() error {
 	}
 
 	p.MountOpts = append(p.MountOpts, "bind")
-	
+
 	err = p.Mounter.Mount(p.DevicePath, p.Request.GetTargetPath(), "", p.MountOpts)
 	if err != nil {
 		return fmt.Errorf("%w at target path %s: %s", ErrFailedMount, p.Request.GetTargetPath(), err.Error())

@@ -3,10 +3,10 @@ package node
 import (
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"k8s.io/mount-utils"
-	"net/http"
-	"strings"
 
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 
@@ -115,7 +115,7 @@ func nodePublishVolume(
 		devicePath = getSSDDevicePath(serialNumber)
 	}
 
-	alreadyMounted, checkErr := verifyMountedVolumeWithUtils(d.Mounter, request.GetTargetPath(), devicePath)
+	alreadyMounted, checkErr := verifyMountedVolumeWithUtils(mounter, request.GetTargetPath(), devicePath)
 	if checkErr != nil {
 		return fmt.Errorf("failed to verify if volume is already mounted: %w", checkErr)
 	}

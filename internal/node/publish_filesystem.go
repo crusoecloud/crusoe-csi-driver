@@ -2,10 +2,11 @@ package node
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 	"k8s.io/mount-utils"
-	"os"
 )
 
 type PublishFilesystem struct {
@@ -85,6 +86,7 @@ func (p PublishFilesystem) publishVirtiofsFilesystemVolume() error {
 	if err != nil {
 		return fmt.Errorf("%w at target path %s: %s", ErrFailedMount, p.Request.GetTargetPath(), err.Error())
 	}
+
 	return nil
 }
 

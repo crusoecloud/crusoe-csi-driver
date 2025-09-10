@@ -3,11 +3,14 @@ package node
 import (
 	"errors"
 	"fmt"
+
 	"k8s.io/mount-utils"
 )
 
-var errNothingMounted = errors.New("nothing mounted at target path")
-var errDeviceMismatch = errors.New("device mismatch")
+var (
+	errNothingMounted = errors.New("nothing mounted at target path")
+	errDeviceMismatch = errors.New("device mismatch")
+)
 
 func isMountPointQuick(mounter *mount.SafeFormatAndMount, targetPath string) (bool, error) {
 	// May suggest a mount is not present when it is.
@@ -51,8 +54,8 @@ func verifyMountedVolumeWithUtilsHelper(mounter *mount.SafeFormatAndMount, targe
 		return fmt.Errorf("failed to get device name from mount: %w", err)
 	}
 
-	//TODO: removeme
-	//klog.Warningf("actualDeviceFullPath: %s, deviceFullPath: %s", actualDeviceFullPath, deviceFullPath)
+	// TODO: removeme
+	// klog.Warningf("actualDeviceFullPath: %s, deviceFullPath: %s", actualDeviceFullPath, deviceFullPath)
 
 	if actualDeviceFullPath != deviceFullPath {
 		return fmt.Errorf("%w: expected %s, got %s", errDeviceMismatch, deviceFullPath, actualDeviceFullPath)
@@ -61,35 +64,30 @@ func verifyMountedVolumeWithUtilsHelper(mounter *mount.SafeFormatAndMount, targe
 	return nil
 }
 
-// verifyMountedVolumeWithUtils checks if the desired volume is mounted at the target path
-func verifyMountedVolumeWithUtils(mounter *mount.SafeFormatAndMount, targetPath string, deviceFullPath string) (bool, error) {
+// verifyMountedVolumeWithUtils checks if the desired volume is mounted at the target path.
+func verifyMountedVolumeWithUtils(mounter *mount.SafeFormatAndMount, targetPath, deviceFullPath string) (bool, error) {
 	// Idempotency check: exit early if the disk is already mounted to the target path
 	verifyErr := verifyMountedVolumeWithUtilsHelper(mounter, targetPath, deviceFullPath)
 
 	switch {
 	// Disk is already mounted to the target path, exit early
 	case verifyErr == nil:
-		{
-			return true, nil
-		}
+		return true, nil
 	// Nothing is mounted at the target path, continue mounting the disk
 	case errors.Is(verifyErr, errNothingMounted):
-		{
-			return false, nil
-		}
+		return false, nil
+
 	// Another disk is mounted at the target path, unmount the existing disk and continue mounting the disk
 	case errors.Is(verifyErr, errDeviceMismatch):
-		{
-			unmountErr := mounter.Unmount(targetPath)
-			if unmountErr != nil {
-				return false, fmt.Errorf("failed to cleanup existing mount at %s", targetPath)
-			}
-
-			return false, nil
+		unmountErr := mounter.Unmount(targetPath)
+		if unmountErr != nil {
+			return false, fmt.Errorf("failed to cleanup existing mount at %s", targetPath)
 		}
+
+		return false, nil
+
 	// Failed to verify mounted volume
 	default:
 		return false, verifyErr
 	}
-
 }
