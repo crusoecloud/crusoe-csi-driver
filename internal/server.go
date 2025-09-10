@@ -140,7 +140,6 @@ func listen() (net.Listener, error) {
 	return listener, nil
 }
 
-//nolint:gocritic // don't combine parameter types
 func newCrusoeClientWithViperConfig() *crusoeapi.APIClient {
 	return crusoe.NewCrusoeClient(
 		viper.GetString(CrusoeAPIEndpointFlag),

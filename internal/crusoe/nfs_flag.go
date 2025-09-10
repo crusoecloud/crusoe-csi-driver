@@ -13,8 +13,8 @@ type NfsFlagResponse struct {
 	Status bool `json:"status"`
 }
 
-// GetNFSFlag returns true if the project has NFS enabled
-func GetNFSFlag(crusoeHTTPClient *http.Client, apiEndpoint string, projectID string) (bool, error) {
+// GetNFSFlag returns true if the project has NFS enabled.
+func GetNFSFlag(crusoeHTTPClient *http.Client, apiEndpoint, projectID string) (bool, error) {
 	nfsFlagRoute := fmt.Sprintf(nfsFlagRouteTemplate, apiEndpoint, projectID)
 	resp, err := crusoeHTTPClient.Get(nfsFlagRoute)
 	if err != nil {
@@ -31,8 +31,10 @@ func GetNFSFlag(crusoeHTTPClient *http.Client, apiEndpoint string, projectID str
 	}
 
 	var nfsFlag NfsFlagResponse
-	if err = json.Unmarshal(bodyBytes, &nfsFlag); err != nil {
-		return false, err
+
+	unmarshalErr := json.Unmarshal(bodyBytes, &nfsFlag)
+	if unmarshalErr != nil {
+		return false, unmarshalErr
 	}
 
 	return nfsFlag.Status, nil
