@@ -196,7 +196,7 @@ func NewCrusoeClient(host, key, secret, userAgent string) *crusoeapi.APIClient {
 	return crusoeapi.NewAPIClient(cfg)
 }
 
-func NewCrusoeHTTPClient(apiKey string, secretKey string) *http.Client {
+func NewCrusoeHTTPClient(apiKey, secretKey string) *http.Client {
 	crusoeHTTPClient := http.Client{}
 	crusoeHTTPClient.Transport = NewAuthenticatingTransport(nil, apiKey, secretKey)
 
