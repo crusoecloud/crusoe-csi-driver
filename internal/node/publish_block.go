@@ -11,10 +11,10 @@ import (
 )
 
 type PublishBlock struct {
-	DevicePath string
 	Mounter    *mount.SafeFormatAndMount
-	MountOpts  []string
 	Request    *csi.NodePublishVolumeRequest
+	DevicePath string
+	MountOpts  []string
 }
 
 func (p PublishBlock) Publish() error {

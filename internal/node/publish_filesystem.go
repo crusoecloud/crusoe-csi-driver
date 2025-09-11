@@ -2,8 +2,9 @@ package node
 
 import (
 	"fmt"
-	"k8s.io/klog/v2"
 	"os"
+
+	"k8s.io/klog/v2"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
@@ -11,13 +12,13 @@ import (
 )
 
 type PublishFilesystem struct {
-	DevicePath string
 	Mounter    *mount.SafeFormatAndMount
 	Resizer    *mount.ResizeFs
-	MountOpts  []string
-	DiskType   common.DiskType
-	NfsEnabled bool
 	Request    *csi.NodePublishVolumeRequest
+	DevicePath string
+	DiskType   common.DiskType
+	MountOpts  []string
+	NfsEnabled bool
 }
 
 func (p PublishFilesystem) Publish() error {

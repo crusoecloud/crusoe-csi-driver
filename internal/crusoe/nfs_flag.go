@@ -2,12 +2,16 @@ package crusoe
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 )
 
 const nfsFlagRouteTemplate = "%s/projects/%s/storage/nfs/is-using-nfs"
+
+var errReadNfsResponse = errors.New("failed to read NFS flag response")
+var errUnmarshalNfsFlag = errors.New("failed to unmarshal NFS flag response")
 
 type NfsFlagResponse struct {
 	Status bool `json:"status"`
@@ -27,14 +31,14 @@ func GetNFSFlag(crusoeHTTPClient *http.Client, apiEndpoint, projectID string) (b
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("%w: %w", errReadNfsResponse, err)
 	}
 
 	var nfsFlag NfsFlagResponse
 
 	unmarshalErr := json.Unmarshal(bodyBytes, &nfsFlag)
 	if unmarshalErr != nil {
-		return false, unmarshalErr
+		return false, fmt.Errorf("%w: %w", errUnmarshalNfsFlag, unmarshalErr)
 	}
 
 	return nfsFlag.Status, nil
