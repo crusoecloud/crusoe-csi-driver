@@ -71,8 +71,7 @@ build: ## Builds the executable and places it in the build dir
 
 .PHONY: cross
 cross: ## Builds the cross compiled executable for use within a container
-	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${BUILDDIR}/${CSI_DRIVER_NAME} ${GO_LDFLAGS} ${CSI_DRIVER_PKG}
-
+	@GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ${BUILDDIR}/${CSI_DRIVER_NAME} ${GO_LDFLAGS} ${CSI_DRIVER_PKG}
 
 .PHONY: install
 install: ## Builds and installs the executable on PATH
