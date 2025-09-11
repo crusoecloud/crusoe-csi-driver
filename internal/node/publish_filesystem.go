@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"k8s.io/klog/v2"
 	"os"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -66,11 +67,15 @@ func (p PublishFilesystem) publishSSDFilesystemVolume() error {
 
 func (p PublishFilesystem) publishFSFilesystemVolume() error {
 	if p.NfsEnabled {
+		// TODO: removeme
+		klog.Infof("Publishing NFS volume")
 		publishErr := p.publishNFSFilesystemVolume()
 		if publishErr != nil {
 			return fmt.Errorf("%w at target path %s: %s", ErrFailedMount, p.Request.GetTargetPath(), publishErr.Error())
 		}
 	} else {
+		// TODO: removeme
+		klog.Infof("Publishing VirtioFS volume")
 		publishErr := p.publishVirtiofsFilesystemVolume()
 		if publishErr != nil {
 			return fmt.Errorf("%w at target path %s: %s", ErrFailedMount, p.Request.GetTargetPath(), publishErr.Error())
