@@ -133,7 +133,7 @@ func nodePublishVolume(
 			Request:    request,
 		}.Publish()
 	case request.GetVolumeCapability().GetMount() != nil:
-		return PublishFilesystem{
+		return (&PublishFilesystem{
 			DevicePath: devicePath,
 			Mounter:    mounter,
 			Resizer:    resizer,
@@ -141,7 +141,7 @@ func nodePublishVolume(
 			DiskType:   diskType,
 			NfsEnabled: nfsEnabled,
 			Request:    request,
-		}.Publish()
+		}).Publish()
 	default:
 		return fmt.Errorf("%w: %s", ErrUnexpectedVolumeCapability, request.GetVolumeCapability())
 	}
