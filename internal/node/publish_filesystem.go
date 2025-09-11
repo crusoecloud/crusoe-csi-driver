@@ -21,7 +21,7 @@ type PublishFilesystem struct {
 	NfsEnabled bool
 }
 
-func (p PublishFilesystem) Publish() error {
+func (p *PublishFilesystem) Publish() error {
 	// Make parent directory for target path
 	// os.MkdirAll will be a noop if the directory already exists
 	mkDirErr := os.MkdirAll(p.Request.GetTargetPath(), newDirPerms)
@@ -43,7 +43,7 @@ func (p PublishFilesystem) Publish() error {
 	}
 }
 
-func (p PublishFilesystem) publishSSDFilesystemVolume() error {
+func (p *PublishFilesystem) publishSSDFilesystemVolume() error {
 	err := p.Mounter.FormatAndMount(p.DevicePath,
 		p.Request.GetTargetPath(),
 		p.Request.GetVolumeCapability().GetMount().GetFsType(),
@@ -66,7 +66,7 @@ func (p PublishFilesystem) publishSSDFilesystemVolume() error {
 	return nil
 }
 
-func (p PublishFilesystem) publishFSFilesystemVolume() error {
+func (p *PublishFilesystem) publishFSFilesystemVolume() error {
 	if p.NfsEnabled {
 		// TODO: removeme
 		klog.Infof("Publishing NFS volume")
@@ -86,7 +86,7 @@ func (p PublishFilesystem) publishFSFilesystemVolume() error {
 	return nil
 }
 
-func (p PublishFilesystem) publishVirtiofsFilesystemVolume() error {
+func (p *PublishFilesystem) publishVirtiofsFilesystemVolume() error {
 	// Mount the disk to the target path
 	err := p.Mounter.Mount(p.DevicePath, p.Request.GetTargetPath(), virtioFilesystem, p.MountOpts)
 	if err != nil {
@@ -96,7 +96,7 @@ func (p PublishFilesystem) publishVirtiofsFilesystemVolume() error {
 	return nil
 }
 
-func (p PublishFilesystem) publishNFSFilesystemVolume() error {
+func (p *PublishFilesystem) publishNFSFilesystemVolume() error {
 	nfsMountOpts := []string{
 		"vers=3",
 		"nconnect=16",
