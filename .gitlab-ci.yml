@@ -28,8 +28,16 @@ build_and_push:
     - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
     # Build an image based on the commit ref, this will be available
     # internally for testing feature branches and testing pre-release versions
-    - docker build --no-cache --pull -f "${DOCKERFILE:-./Dockerfile}" --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" --build-arg CRUSOE_CSI_DRIVER_VERSION="$CI_COMMIT_REF_NAME" -t $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}" .
-    - docker push $RELEASE_IMAGE:"${CI_COMMIT_REF_NAME##*/}"
+    - docker buildx create --use --name crusoe-csi-driver-builder
+    - |
+      docker buildx build --no-cache --pull \
+      -f "${DOCKERFILE:-./Dockerfile}" \
+      --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" \
+      --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" \
+      --build-arg CRUSOE_CSI_DRIVER_VERSION="$CI_COMMIT_REF_NAME" \
+      --platform linux/amd64,linux/arm64 \
+      -t "$RELEASE_IMAGE:${CI_COMMIT_REF_NAME##*/}" \
+      --push .
 
 # Remove the tag_semver and pages jobs from merges into main.
 # The tag_semver job will be run using a GitHub action instead

@@ -9,7 +9,7 @@ BUILDTAGS :=
 
 GOLANGCI_VERSION = v1.62.0
 GO_ACC_VERSION = latest
-GOTESTSUM_VERSION = latest
+GOTESTSUM_VERSION = v1.12
 GOCOVER_VERSION = latest
 
 export CRUSOE_CSI_DRIVER_VERSION?=$(shell git describe --always --tags --dirty)
@@ -69,10 +69,10 @@ lint-ci: ## Verifies `golangci-lint` passes and outputs in CI-friendly format
 build: ## Builds the executable and places it in the build dir
 	@go build -o ${BUILDDIR}/${NAME} ${CSI_DRIVER_PKG}
 
+# FIXME: https://crusoe.atlassian.net/browse/CRUSOE-35425
 .PHONY: cross
 cross: ## Builds the cross compiled executable for use within a container
 	@GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${BUILDDIR}/${CSI_DRIVER_NAME} ${GO_LDFLAGS} ${CSI_DRIVER_PKG}
-
 
 .PHONY: install
 install: ## Builds and installs the executable on PATH
