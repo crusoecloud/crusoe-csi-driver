@@ -28,7 +28,7 @@ build_and_push:
     - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
     # Build an image based on the commit ref, this will be available
     # internally for testing feature branches and testing pre-release versions
-    - docker buildx create -use --name crusoe-csi-driver-builder
+    - docker buildx create --use --name crusoe-csi-driver-builder
     - |
       docker buildx build --no-cache --pull \
       -f "${DOCKERFILE:-./Dockerfile}" \
