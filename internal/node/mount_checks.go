@@ -11,9 +11,13 @@ import (
 )
 
 var (
+	errMountPointCheckFailed = errors.New("failed to check if target path is a mount point")
+
 	errPathEmpty      = errors.New("target path is empty")
 	errNothingMounted = errors.New("nothing mounted at target path")
 	errDeviceMismatch = errors.New("device mismatch")
+
+	errMountCleanupFailed = errors.New("failed to cleanup existing mount")
 )
 
 func isMountPointQuick(mounter *mount.SafeFormatAndMount, targetPath string) (bool, error) {
@@ -25,7 +29,7 @@ func isMountPointQuick(mounter *mount.SafeFormatAndMount, targetPath string) (bo
 	// false: definitely is a mount point
 	isLikelyNotMountPoint, err := mounter.IsLikelyNotMountPoint(targetPath)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("%w: %w", errMountPointCheckFailed, err)
 	}
 
 	if !isLikelyNotMountPoint {
@@ -35,7 +39,7 @@ func isMountPointQuick(mounter *mount.SafeFormatAndMount, targetPath string) (bo
 	// Exhaustively check if targetPath is a mount point
 	isMountPoint, err := mounter.IsMountPoint(targetPath)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("%w: %w", errMountPointCheckFailed, err)
 	}
 
 	return isMountPoint, nil
@@ -96,7 +100,7 @@ func verifyMountedVolumeWithUtils(mounter *mount.SafeFormatAndMount, targetPath,
 	case errors.Is(verifyErr, errDeviceMismatch):
 		unmountErr := mounter.Unmount(targetPath)
 		if unmountErr != nil {
-			return false, fmt.Errorf("failed to cleanup existing mount at %s", targetPath)
+			return false, fmt.Errorf("%w at %s: %w", errMountCleanupFailed, targetPath, unmountErr)
 		}
 
 		return false, nil
