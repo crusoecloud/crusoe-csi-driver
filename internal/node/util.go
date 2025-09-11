@@ -172,6 +172,11 @@ func supportsFS(node *crusoeapi.InstanceV1Alpha5) bool {
 		return true
 	}
 
+	// There are 4 slices in a GB200 node
+	if strings.Contains(typeSegments[0], "gb200-186gb-nvl") && typeSegments[1] == "4x" {
+		return true
+	}
+
 	// Otherwise, there are 8 slices in every other GPU node
 	if typeSegments[1] == "8x" {
 		return true
