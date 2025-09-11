@@ -9,7 +9,7 @@ BUILDTAGS :=
 
 GOLANGCI_VERSION = v1.62.0
 GO_ACC_VERSION = latest
-GOTESTSUM_VERSION = latest
+GOTESTSUM_VERSION = v1.12
 GOCOVER_VERSION = latest
 
 export CRUSOE_CSI_DRIVER_VERSION?=$(shell git describe --always --tags --dirty)
