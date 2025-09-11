@@ -69,6 +69,8 @@ func (d *DefaultNode) NodePublishVolume(_ context.Context, request *csi.NodePubl
 	if d.DiskType == common.DiskTypeFS {
 		var err error
 		nfsEnabled, err = crusoe.GetNFSFlag(d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
+		// TODO: removeme
+		klog.Infof("NFS enabled: %v", nfsEnabled)
 		if err != nil {
 			klog.Errorf("%s: %s", ErrFailedToFetchNFSFlag, err)
 
