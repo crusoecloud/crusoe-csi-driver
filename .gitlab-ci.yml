@@ -28,7 +28,8 @@ build_and_push:
     - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
     # Build an image based on the commit ref, this will be available
     # internally for testing feature branches and testing pre-release versions
-    - docker buildx build --no-cache --pull \
+    - |
+      docker buildx build --no-cache --pull \
       -f "${DOCKERFILE:-./Dockerfile}" \
       --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" \
       --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" \
