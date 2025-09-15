@@ -22,8 +22,9 @@ const (
 	virtioFilesystem     = "virtiofs"
 	readOnlyMountOption  = "ro"
 	noLoadMountOption    = "noload"
-	nfsStaticRemotePorts = "100.64.0.2-100.64.0.17"
-	nfsStaticIP          = "100.64.0.2"
+	// TODO: REVERT ME PRIOR TO MERGING
+	nfsStaticRemotePorts = "204.52.31.176-204.52.31.191"
+	nfsStaticIP          = "204.52.31.176"
 )
 
 var (
