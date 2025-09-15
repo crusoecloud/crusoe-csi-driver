@@ -22,8 +22,9 @@ const (
 	virtioFilesystem     = "virtiofs"
 	readOnlyMountOption  = "ro"
 	noLoadMountOption    = "noload"
-	nfsStaticRemotePorts = "100.64.0.2-100.64.0.17"
-	nfsStaticIP          = "100.64.0.2"
+	// TODO: REVERT ME PRIOR TO MERGING
+	nfsStaticRemotePorts = "204.52.31.176-204.52.31.191"
+	nfsStaticIP          = "204.52.31.176"
 )
 
 var (
@@ -42,14 +43,25 @@ func getNFSFSDevicePath(fsDevicePath string) string {
 	return fmt.Sprintf("%s:/volumes/%s", nfsStaticIP, fsDevicePath)
 }
 
-func getFSDevicePath(request *csi.NodePublishVolumeRequest) (string, error) {
-	volumeContext := request.GetVolumeContext()
-	devicePath, ok := volumeContext[common.VolumeContextDiskNameKey]
-	if !ok {
-		return "", ErrVolumeMissingName
+func getFSDevicePath(request *csi.NodePublishVolumeRequest, supportsNfs bool) (string, error) {
+	switch supportsNfs {
+	case true:
+		return request.GetVolumeId(), nil
+	case false:
+		volumeContext := request.GetVolumeContext()
+		devicePath, ok := volumeContext[common.VolumeContextDiskNameKey]
+		request.GetVolumeId()
+		if !ok {
+			return "", ErrVolumeMissingName
+		}
+
+		return devicePath, nil
 	}
 
-	return devicePath, nil
+	panic(fmt.Sprintf(
+		"Switch is intended to be exhaustive, %t is not a valid switch case", supportsNfs))
+
+	return "", nil
 }
 
 func getSSDDevicePath(serialNumber string) string {
@@ -107,7 +119,7 @@ func nodePublishVolume(
 	switch diskType {
 	case common.DiskTypeFS:
 		var err error
-		devicePath, err = getFSDevicePath(request)
+		devicePath, err = getFSDevicePath(request, nfsEnabled)
 		if err != nil {
 			return fmt.Errorf("failed to get device path: %w", err)
 		}
