@@ -22,7 +22,7 @@ const (
 	virtioFilesystem     = "virtiofs"
 	readOnlyMountOption  = "ro"
 	noLoadMountOption    = "noload"
-	// TODO: REVERT ME PRIOR TO MERGING
+	// TODO: REVERT ME PRIOR TO MERGING.
 	nfsStaticRemotePorts = "204.52.31.176-204.52.31.191"
 	nfsStaticIP          = "204.52.31.176"
 )
@@ -60,8 +60,6 @@ func getFSDevicePath(request *csi.NodePublishVolumeRequest, supportsNfs bool) (s
 
 	panic(fmt.Sprintf(
 		"Switch is intended to be exhaustive, %t is not a valid switch case", supportsNfs))
-
-	return "", nil
 }
 
 func getSSDDevicePath(serialNumber string) string {
