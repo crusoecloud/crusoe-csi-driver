@@ -89,7 +89,7 @@ func RunMain(_ *cobra.Command, _ []string) error {
 	signal.Notify(interruptChan, os.Interrupt)
 	signal.Notify(interruptChan, syscall.SIGTERM)
 
-	klog.Infof("Initializing driver %s %s", common.PluginName, common.PluginVersion)
+	klog.Infof("Initializing driver %s version %s", common.PluginName, common.PluginVersion)
 
 	// Serve CSI gRPC server
 	return Serve(rootCtx, rootCtxCancel, interruptChan)
