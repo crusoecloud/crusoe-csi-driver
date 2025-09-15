@@ -278,11 +278,11 @@ func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptC
 		return err
 	}
 
-	klog.Infof("Listening on: %s", listener.Addr())
+	klog.Infof("Listening on socket %s", listener.Addr())
 	gRPCErrChan := make(chan error, 1)
 
 	go func() {
-		klog.Infof("Starting driver %s %s", common.PluginName, common.PluginVersion)
+		klog.Infof("Starting driver %s version %s", common.PluginName, common.PluginVersion)
 		err = srv.Serve(listener)
 		gRPCErrChan <- err
 	}()
@@ -299,7 +299,7 @@ func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptC
 			if errors.Is(gRPCErr, grpc.ErrServerStopped) {
 				klog.Infof("gRPC server stopped")
 				gracefulStopWithTimeout(srv, gracefulTimeoutDuration)
-				klog.Infof("Driver %s %s stopped", common.PluginName, common.PluginVersion)
+				klog.Infof("Driver %s version %s stopped", common.PluginName, common.PluginVersion)
 
 				return nil
 			}
@@ -308,15 +308,15 @@ func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptC
 		// An error has occurred, attempt to gracefully stop the gRPC server
 		klog.Errorf("Received error from gRPC server: %s", gRPCErr)
 		gracefulStopWithTimeout(srv, gracefulTimeoutDuration)
-		klog.Infof("Driver %s %s stopped", common.PluginName, common.PluginVersion)
+		klog.Infof("Driver %s version %s stopped", common.PluginName, common.PluginVersion)
 
 		return gRPCErr
 	}
 
 	// Normal termination flow
-	klog.Infof("Gracefully stopping driver %s %s", common.PluginName, common.PluginVersion)
+	klog.Infof("Gracefully stopping driver %s version %s", common.PluginName, common.PluginVersion)
 	gracefulStopWithTimeout(srv, gracefulTimeoutDuration)
-	klog.Infof("Driver %s %s stopped", common.PluginName, common.PluginVersion)
+	klog.Infof("Driver %s version %s stopped", common.PluginName, common.PluginVersion)
 
 	return nil
 }
