@@ -37,7 +37,7 @@ func (p *PublishFilesystem) Publish() error {
 	case p.NfsEnabled:
 		klog.Infof("Publishing NFS volume")
 		// Append mandatory NFS mount options
-		mountOpts = append(p.MountOpts, nfsMountOpts...)
+		mountOpts = append(mountOpts, nfsMountOpts...)
 		filesystem = nfsFilesystem
 	default:
 		klog.Infof("Publishing VirtioFS volume")
