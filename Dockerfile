@@ -32,8 +32,6 @@ RUN apk update && \
     apk add --no-cache xfsprogs-extra~=6.8.0 && \
     rm -rf /var/cache/apk/*
 
-# TODO: Install VAST NFS stuff here too???
-
 COPY --from=builder /build/dist/crusoe-csi-driver /usr/local/go/bin/crusoe-csi-driver
 
 ENTRYPOINT ["/usr/local/go/bin/crusoe-csi-driver"]
