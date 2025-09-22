@@ -18,15 +18,14 @@ const (
 	nfsStaticIP          = "204.52.31.176"
 )
 
-var (
-	nfsMountOpts = []string{
-		"vers=3",
-		"nconnect=16",
-		"spread_reads",
-		"spread_writes",
-		fmt.Sprintf("remoteports=%s", nfsStaticRemotePorts),
-	}
-)
+//nolint:gochecknoglobals // can't construct const slice
+var nfsMountOpts = []string{
+	"vers=3",
+	"nconnect=16",
+	"spread_reads",
+	"spread_writes",
+	fmt.Sprintf("remoteports=%s", nfsStaticRemotePorts),
+}
 
 func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {
 	typeSegments := strings.Split(instance.Type_, ".")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	ioFs "io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,8 +19,6 @@ import (
 	"github.com/crusoecloud/crusoe-csi-driver/internal/controller"
 
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
-
-	"github.com/crusoecloud/crusoe-csi-driver/internal/node"
 
 	"k8s.io/mount-utils"
 	"k8s.io/utils/exec"
@@ -128,7 +127,7 @@ func listen() (net.Listener, error) {
 	if ep.Scheme == "unix" {
 		removeErr := os.Remove(ep.Path)
 		if removeErr != nil {
-			if !errors.Is(removeErr, fs.ErrNotExist) {
+			if !errors.Is(removeErr, ioFs.ErrNotExist) {
 				return nil, fmt.Errorf("failed to remove socket file %s: %w", ep.Path, removeErr)
 			}
 		}
@@ -154,103 +153,116 @@ func newCrusoeHTTPClientWithViperConfig() *http.Client {
 	return crusoe.NewCrusoeHTTPClient(viper.GetString(CrusoeAccessKeyFlag), viper.GetString(CrusoeSecretKeyFlag))
 }
 
-//nolint:cyclop // server instantiation is long
+func registerIdentity(grpcServer *grpc.Server, serveController bool) {
+	capabilities := common.BaseIdentityCapabilities
+
+	if serveController {
+		capabilities = append(capabilities, &common.PluginCapabilityControllerService)
+	}
+	switch common.PluginDiskType {
+	case common.DiskTypeFS:
+		capabilities = append(capabilities, &common.PluginCapabilityVolumeExpansionOnline)
+	case common.DiskTypeSSD:
+		capabilities = append(capabilities, &common.PluginCapabilityVolumeExpansionOffline)
+	default:
+		// Switch is intended to be exhaustive, reaching this case is a bug
+		panic(fmt.Sprintf(
+			"Switch is intended to be exhaustive, %s is not a valid switch case", common.PluginDiskType))
+	}
+	csi.RegisterIdentityServer(grpcServer, &identity.Service{
+		Capabilities:  capabilities,
+		PluginName:    common.PluginName,
+		PluginVersion: common.PluginVersion,
+	})
+}
+
+func registerController(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) {
+	capabilities := common.BaseControllerCapabilities
+
+	csi.RegisterControllerServer(grpcServer, &controller.DefaultController{
+		CrusoeClient:  newCrusoeClientWithViperConfig(),
+		HostInstance:  hostInstance,
+		Capabilities:  capabilities,
+		DiskType:      common.PluginDiskType,
+		PluginName:    common.PluginName,
+		PluginVersion: common.PluginVersion,
+	})
+}
+
+func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) {
+	// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
+	capabilities := common.BaseNodeCapabilities
+	var maxVolumesPerNode int64
+	var nodeServer csi.NodeServer
+
+	switch common.PluginDiskType {
+	case common.DiskTypeSSD:
+		maxVolumesPerNode = common.MaxSSDVolumesPerNode - 1 // Subtract 1 to allow for the OS/boot disk
+		nodeServer = &ssd.Node{
+			CrusoeClient:      newCrusoeClientWithViperConfig(),
+			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
+			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
+			HostInstance:      hostInstance,
+			Capabilities:      capabilities,
+			MaxVolumesPerNode: maxVolumesPerNode,
+			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
+			Resizer:           mount.NewResizeFs(exec.New()),
+			DiskType:          common.PluginDiskType,
+			PluginName:        common.PluginName,
+			PluginVersion:     common.PluginVersion,
+		}
+	case common.DiskTypeFS:
+		maxVolumesPerNode = common.MaxFSVolumesPerNode
+		nodeServer = &fs.Node{
+			CrusoeClient:      newCrusoeClientWithViperConfig(),
+			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
+			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
+			HostInstance:      hostInstance,
+			Capabilities:      capabilities,
+			MaxVolumesPerNode: maxVolumesPerNode,
+			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
+			Resizer:           mount.NewResizeFs(exec.New()),
+			DiskType:          common.PluginDiskType,
+			PluginName:        common.PluginName,
+			PluginVersion:     common.PluginVersion,
+		}
+	default:
+		// Switch is intended to be exhaustive, reaching this case is a bug
+		panic(fmt.Sprintf(
+			"Switch is intended to be exhaustive, %s is not a valid switch case", common.PluginDiskType))
+	}
+
+	csi.RegisterNodeServer(grpcServer, nodeServer)
+}
+
 func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) {
 	serveIdentity := false
 	serveController := false
 	serveNode := false
 
-	for _, s := range Services {
-		switch s {
+	for _, service := range Services {
+		switch service {
 		case ServiceTypeIdentity:
 			serveIdentity = true
 		case ServiceTypeController:
 			serveController = true
 		case ServiceTypeNode:
 			serveNode = true
+		default:
+			panic(fmt.Sprintf("Switch is intended to be exhaustive, %v is not a valid switch case", service))
 		}
 	}
 
 	if serveIdentity {
-		capabilities := common.BaseIdentityCapabilities
-
-		if serveController {
-			capabilities = append(capabilities, &common.PluginCapabilityControllerService)
-		}
-		switch common.PluginDiskType {
-		case common.DiskTypeFS:
-			capabilities = append(capabilities, &common.PluginCapabilityVolumeExpansionOnline)
-		case common.DiskTypeSSD:
-			capabilities = append(capabilities, &common.PluginCapabilityVolumeExpansionOffline)
-		default:
-			// Switch is intended to be exhaustive, reaching this case is a bug
-			panic(fmt.Sprintf(
-				"Switch is intended to be exhaustive, %s is not a valid switch case", common.PluginDiskType))
-		}
-		csi.RegisterIdentityServer(grpcServer, &identity.Service{
-			Capabilities:  capabilities,
-			PluginName:    common.PluginName,
-			PluginVersion: common.PluginVersion,
-		})
+		registerIdentity(grpcServer, serveController)
 	}
 
 	if serveController {
-		capabilities := common.BaseControllerCapabilities
-
-		csi.RegisterControllerServer(grpcServer, &controller.DefaultController{
-			CrusoeClient:  newCrusoeClientWithViperConfig(),
-			HostInstance:  hostInstance,
-			Capabilities:  capabilities,
-			DiskType:      common.PluginDiskType,
-			PluginName:    common.PluginName,
-			PluginVersion: common.PluginVersion,
-		})
+		registerController(grpcServer, hostInstance)
 	}
 
 	if serveNode {
-		// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
-		capabilities := common.BaseNodeCapabilities
-		var maxVolumesPerNode int64
-		var nodeServer csi.NodeServer
-
-		switch common.PluginDiskType {
-		case common.DiskTypeSSD:
-			maxVolumesPerNode = common.MaxSSDVolumesPerNode - 1 // Subtract 1 to allow for the OS/boot disk
-			nodeServer = &ssd.SSDNode{
-				CrusoeClient:      newCrusoeClientWithViperConfig(),
-				CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
-				CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
-				HostInstance:      hostInstance,
-				Capabilities:      capabilities,
-				MaxVolumesPerNode: maxVolumesPerNode,
-				Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
-				Resizer:           mount.NewResizeFs(exec.New()),
-				DiskType:          common.PluginDiskType,
-				PluginName:        common.PluginName,
-				PluginVersion:     common.PluginVersion,
-			}
-		case common.DiskTypeFS:
-			maxVolumesPerNode = common.MaxFSVolumesPerNode
-			nodeServer = &fs.FSNode{
-				CrusoeClient:      newCrusoeClientWithViperConfig(),
-				CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
-				CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
-				HostInstance:      hostInstance,
-				Capabilities:      capabilities,
-				MaxVolumesPerNode: maxVolumesPerNode,
-				Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
-				Resizer:           mount.NewResizeFs(exec.New()),
-				DiskType:          common.PluginDiskType,
-				PluginName:        common.PluginName,
-				PluginVersion:     common.PluginVersion,
-			}
-		default:
-			// Switch is intended to be exhaustive, reaching this case is a bug
-			panic(fmt.Sprintf(
-				"Switch is intended to be exhaustive, %s is not a valid switch case", common.PluginDiskType))
-		}
-
-		csi.RegisterNodeServer(grpcServer, nodeServer)
+		registerNode(grpcServer, hostInstance)
 	}
 }
 

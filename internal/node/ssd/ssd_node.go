@@ -14,22 +14,22 @@ import (
 	"k8s.io/mount-utils"
 )
 
-type SSDNode struct {
+type Node struct {
 	csi.UnimplementedNodeServer
 	CrusoeClient      *crusoeapi.APIClient
 	CrusoeHTTPClient  *http.Client
-	CrusoeAPIEndpoint string
 	HostInstance      *crusoeapi.InstanceV1Alpha5
-	Capabilities      []*csi.NodeServiceCapability
-	MaxVolumesPerNode int64
 	Mounter           *mount.SafeFormatAndMount
 	Resizer           *mount.ResizeFs
+	CrusoeAPIEndpoint string
 	DiskType          common.DiskType
 	PluginName        string
 	PluginVersion     string
+	Capabilities      []*csi.NodeServiceCapability
+	MaxVolumesPerNode int64
 }
 
-func (d *SSDNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (
+func (d *Node) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (
 	*csi.NodeStageVolumeResponse,
 	error,
 ) {
@@ -38,7 +38,7 @@ func (d *SSDNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeReque
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeStageVolume", common.ErrNotImplemented)
 }
 
-func (d *SSDNode) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVolumeRequest) (
+func (d *Node) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVolumeRequest) (
 	*csi.NodeUnstageVolumeResponse,
 	error,
 ) {
@@ -47,7 +47,7 @@ func (d *SSDNode) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVolumeR
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeUnstageVolume", common.ErrNotImplemented)
 }
 
-func (d *SSDNode) NodePublishVolume(_ context.Context, request *csi.NodePublishVolumeRequest) (
+func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolumeRequest) (
 	*csi.NodePublishVolumeResponse,
 	error,
 ) {
@@ -73,7 +73,7 @@ func (d *SSDNode) NodePublishVolume(_ context.Context, request *csi.NodePublishV
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func (d *SSDNode) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublishVolumeRequest) (
+func (d *Node) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublishVolumeRequest) (
 	*csi.NodeUnpublishVolumeResponse,
 	error,
 ) {
@@ -93,7 +93,7 @@ func (d *SSDNode) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpubl
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-func (d *SSDNode) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolumeStatsRequest) (
+func (d *Node) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolumeStatsRequest) (
 	*csi.NodeGetVolumeStatsResponse,
 	error,
 ) {
@@ -105,7 +105,7 @@ func (d *SSDNode) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolumeStat
 // NodeExpandVolume This function is currently unused.
 // common.DiskTypeFS disks do not require expansion on the node.
 // common.DiskTypeSSD disks would require expansion on the node if they supported online expansion.
-func (d *SSDNode) NodeExpandVolume(_ context.Context, _ *csi.NodeExpandVolumeRequest) (
+func (d *Node) NodeExpandVolume(_ context.Context, _ *csi.NodeExpandVolumeRequest) (
 	*csi.NodeExpandVolumeResponse,
 	error,
 ) {
@@ -114,7 +114,7 @@ func (d *SSDNode) NodeExpandVolume(_ context.Context, _ *csi.NodeExpandVolumeReq
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeExpandVolume", common.ErrNotImplemented)
 }
 
-func (d *SSDNode) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabilitiesRequest) (
+func (d *Node) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabilitiesRequest) (
 	*csi.NodeGetCapabilitiesResponse,
 	error,
 ) {
@@ -123,7 +123,7 @@ func (d *SSDNode) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabilit
 	}, nil
 }
 
-func (d *SSDNode) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+func (d *Node) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	topologySegments := map[string]string{
 		common.GetTopologyKey(d.PluginName, common.TopologyLocationKey): d.HostInstance.Location,
 	}

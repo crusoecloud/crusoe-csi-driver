@@ -20,8 +20,8 @@ func getSSDDevicePath(serialNumber string) string {
 // NodeExpandVolume This function is currently unused.
 // common.DiskTypeFS disks do not require expansion on the node.
 // common.DiskTypeSSD disks would require expansion on the node if they supported online expansion.
-// nolint
-func nodeExpandVolume(ctx context.Context, d *SSDNode, request *csi.NodeExpandVolumeRequest) (
+//nolint
+func nodeExpandVolume(ctx context.Context, d *Node, request *csi.NodeExpandVolumeRequest) (
 	*csi.NodeExpandVolumeResponse,
 	error,
 ) {

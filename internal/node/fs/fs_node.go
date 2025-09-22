@@ -16,22 +16,22 @@ import (
 	"k8s.io/mount-utils"
 )
 
-type FSNode struct {
+type Node struct {
 	csi.UnimplementedNodeServer
 	CrusoeClient      *crusoeapi.APIClient
 	CrusoeHTTPClient  *http.Client
-	CrusoeAPIEndpoint string
 	HostInstance      *crusoeapi.InstanceV1Alpha5
-	Capabilities      []*csi.NodeServiceCapability
-	MaxVolumesPerNode int64
 	Mounter           *mount.SafeFormatAndMount
 	Resizer           *mount.ResizeFs
+	CrusoeAPIEndpoint string
 	DiskType          common.DiskType
 	PluginName        string
 	PluginVersion     string
+	Capabilities      []*csi.NodeServiceCapability
+	MaxVolumesPerNode int64
 }
 
-func (d *FSNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (
+func (d *Node) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (
 	*csi.NodeStageVolumeResponse,
 	error,
 ) {
@@ -40,7 +40,7 @@ func (d *FSNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeReques
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeStageVolume", common.ErrNotImplemented)
 }
 
-func (d *FSNode) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVolumeRequest) (
+func (d *Node) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVolumeRequest) (
 	*csi.NodeUnstageVolumeResponse,
 	error,
 ) {
@@ -49,7 +49,7 @@ func (d *FSNode) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVolumeRe
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeUnstageVolume", common.ErrNotImplemented)
 }
 
-func (d *FSNode) NodePublishVolume(_ context.Context, request *csi.NodePublishVolumeRequest) (
+func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolumeRequest) (
 	*csi.NodePublishVolumeResponse,
 	error,
 ) {
@@ -84,7 +84,7 @@ func (d *FSNode) NodePublishVolume(_ context.Context, request *csi.NodePublishVo
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func (d *FSNode) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublishVolumeRequest) (
+func (d *Node) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublishVolumeRequest) (
 	*csi.NodeUnpublishVolumeResponse,
 	error,
 ) {
@@ -104,7 +104,7 @@ func (d *FSNode) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpubli
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-func (d *FSNode) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolumeStatsRequest) (
+func (d *Node) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolumeStatsRequest) (
 	*csi.NodeGetVolumeStatsResponse,
 	error,
 ) {
@@ -116,7 +116,7 @@ func (d *FSNode) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolumeStats
 // NodeExpandVolume This function is currently unused.
 // common.DiskTypeFS disks do not require expansion on the node.
 // common.DiskTypeSSD disks would require expansion on the node if they supported online expansion.
-func (d *FSNode) NodeExpandVolume(ctx context.Context, request *csi.NodeExpandVolumeRequest) (
+func (d *Node) NodeExpandVolume(_ context.Context, _ *csi.NodeExpandVolumeRequest) (
 	*csi.NodeExpandVolumeResponse,
 	error,
 ) {
@@ -125,7 +125,7 @@ func (d *FSNode) NodeExpandVolume(ctx context.Context, request *csi.NodeExpandVo
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeGetVolumeStats", common.ErrNotImplemented)
 }
 
-func (d *FSNode) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabilitiesRequest) (
+func (d *Node) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabilitiesRequest) (
 	*csi.NodeGetCapabilitiesResponse,
 	error,
 ) {
@@ -134,14 +134,14 @@ func (d *FSNode) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabiliti
 	}, nil
 }
 
-func (d *FSNode) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+func (d *Node) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	topologySegments := map[string]string{
 		common.GetTopologyKey(d.PluginName, common.TopologyLocationKey): d.HostInstance.Location,
 	}
 
 	if d.DiskType == common.DiskTypeFS {
-		topologySegments[common.GetTopologyKey(d.PluginName, common.TopologySupportsSharedDisksKey)] =
-			strconv.FormatBool(supportsFS(d.HostInstance))
+		//nolint:lll // long names
+		topologySegments[common.GetTopologyKey(d.PluginName, common.TopologySupportsSharedDisksKey)] = strconv.FormatBool(supportsFS(d.HostInstance))
 	}
 
 	return &csi.NodeGetInfoResponse{
