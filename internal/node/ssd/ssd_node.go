@@ -1,38 +1,35 @@
-package node
+package ssd
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"strconv"
-
-	"github.com/crusoecloud/crusoe-csi-driver/internal/crusoe"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
+	"github.com/crusoecloud/crusoe-csi-driver/internal/node"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 	"k8s.io/mount-utils"
 )
 
-type DefaultNode struct {
+type SSDNode struct {
 	csi.UnimplementedNodeServer
 	CrusoeClient      *crusoeapi.APIClient
 	CrusoeHTTPClient  *http.Client
 	CrusoeAPIEndpoint string
 	HostInstance      *crusoeapi.InstanceV1Alpha5
+	Capabilities      []*csi.NodeServiceCapability
+	MaxVolumesPerNode int64
 	Mounter           *mount.SafeFormatAndMount
 	Resizer           *mount.ResizeFs
 	DiskType          common.DiskType
 	PluginName        string
 	PluginVersion     string
-	Capabilities      []*csi.NodeServiceCapability
-	MaxVolumesPerNode int64
 }
 
-func (d *DefaultNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (
+func (d *SSDNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (
 	*csi.NodeStageVolumeResponse,
 	error,
 ) {
@@ -41,7 +38,7 @@ func (d *DefaultNode) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeR
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeStageVolume", common.ErrNotImplemented)
 }
 
-func (d *DefaultNode) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVolumeRequest) (
+func (d *SSDNode) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVolumeRequest) (
 	*csi.NodeUnstageVolumeResponse,
 	error,
 ) {
@@ -50,7 +47,7 @@ func (d *DefaultNode) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVol
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeUnstageVolume", common.ErrNotImplemented)
 }
 
-func (d *DefaultNode) NodePublishVolume(_ context.Context, request *csi.NodePublishVolumeRequest) (
+func (d *SSDNode) NodePublishVolume(_ context.Context, request *csi.NodePublishVolumeRequest) (
 	*csi.NodePublishVolumeResponse,
 	error,
 ) {
@@ -61,24 +58,10 @@ func (d *DefaultNode) NodePublishVolume(_ context.Context, request *csi.NodePubl
 	if request.GetReadonly() {
 		// Read-only volumes cannot be written to in any way
 		// We should not attempt to replay the journal
-		mountOpts = append(mountOpts, readOnlyMountOption, noLoadMountOption)
+		mountOpts = append(mountOpts, node.ReadOnlyMountOption, node.NoLoadMountOption)
 	}
 
-	nfsEnabled := false
-
-	if d.DiskType == common.DiskTypeFS {
-		var err error
-		nfsEnabled, err = crusoe.GetNFSFlag(d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
-		// TODO: removeme
-		klog.Infof("NFS enabled: %v", nfsEnabled)
-		if err != nil {
-			klog.Errorf("%s: %s", ErrFailedToFetchNFSFlag, err)
-
-			return nil, status.Errorf(codes.Internal, "%s: %s", ErrFailedToFetchNFSFlag, err)
-		}
-	}
-
-	err := nodePublishVolume(d.Mounter, d.Resizer, mountOpts, d.DiskType, nfsEnabled, request)
+	err := nodePublishVolume(d.Mounter, d.Resizer, mountOpts, request)
 	if err != nil {
 		klog.Errorf("failed to publish volume %s: %s", request.GetVolumeId(), err.Error())
 
@@ -90,7 +73,7 @@ func (d *DefaultNode) NodePublishVolume(_ context.Context, request *csi.NodePubl
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
-func (d *DefaultNode) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublishVolumeRequest) (
+func (d *SSDNode) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublishVolumeRequest) (
 	*csi.NodeUnpublishVolumeResponse,
 	error,
 ) {
@@ -110,7 +93,7 @@ func (d *DefaultNode) NodeUnpublishVolume(_ context.Context, request *csi.NodeUn
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-func (d *DefaultNode) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolumeStatsRequest) (
+func (d *SSDNode) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolumeStatsRequest) (
 	*csi.NodeGetVolumeStatsResponse,
 	error,
 ) {
@@ -122,43 +105,16 @@ func (d *DefaultNode) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolume
 // NodeExpandVolume This function is currently unused.
 // common.DiskTypeFS disks do not require expansion on the node.
 // common.DiskTypeSSD disks would require expansion on the node if they supported online expansion.
-func (d *DefaultNode) NodeExpandVolume(ctx context.Context, request *csi.NodeExpandVolumeRequest) (
+func (d *SSDNode) NodeExpandVolume(_ context.Context, _ *csi.NodeExpandVolumeRequest) (
 	*csi.NodeExpandVolumeResponse,
 	error,
 ) {
-	// Note that this function will only be called for diskType == common.DiskTypeSSD
-	// because FS disks do not require expansion on the node
+	klog.Errorf("%s: NodeExpandVolume", common.ErrNotImplemented)
 
-	// Block devices do not require expansion on the node
-	if request.GetVolumeCapability().GetBlock() != nil {
-		return &csi.NodeExpandVolumeResponse{}, nil
-	}
-
-	// Fetch disk's serial number because NodeExpandVolumeRequest does not include the volume context :(
-	disk, err := crusoe.FindDiskByIDFallible(ctx, d.CrusoeClient, d.HostInstance.ProjectId, request.GetVolumeId())
-	if err != nil {
-		klog.Errorf("failed to find disk %s: %s", request.GetVolumeId(), err)
-
-		return nil, status.Errorf(codes.NotFound, "failed to find disk %s: %s", request.GetVolumeId(), err)
-	}
-	devicePath := getSSDDevicePath(disk.SerialNumber)
-
-	ok, err := d.Resizer.Resize(devicePath, request.GetVolumePath())
-	if err != nil {
-		return nil, fmt.Errorf("failed to resize %s: %w", request.GetVolumePath(), err)
-	}
-
-	if !ok {
-		klog.Errorf("%s for volume %s: %s", ErrFailedResize, request.GetVolumePath(), request.GetVolumeId())
-
-		return nil, status.Errorf(codes.Internal, "%s for volume %s: %s",
-			ErrFailedResize, request.GetVolumePath(), request.GetVolumeId())
-	}
-
-	return &csi.NodeExpandVolumeResponse{}, nil
+	return nil, status.Errorf(codes.Unimplemented, "%s: NodeExpandVolume", common.ErrNotImplemented)
 }
 
-func (d *DefaultNode) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabilitiesRequest) (
+func (d *SSDNode) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabilitiesRequest) (
 	*csi.NodeGetCapabilitiesResponse,
 	error,
 ) {
@@ -167,14 +123,9 @@ func (d *DefaultNode) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapab
 	}, nil
 }
 
-func (d *DefaultNode) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+func (d *SSDNode) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	topologySegments := map[string]string{
 		common.GetTopologyKey(d.PluginName, common.TopologyLocationKey): d.HostInstance.Location,
-	}
-
-	//nolint:lll // long names
-	if d.DiskType == common.DiskTypeFS {
-		topologySegments[common.GetTopologyKey(d.PluginName, common.TopologySupportsSharedDisksKey)] = strconv.FormatBool(supportsFS(d.HostInstance))
 	}
 
 	return &csi.NodeGetInfoResponse{

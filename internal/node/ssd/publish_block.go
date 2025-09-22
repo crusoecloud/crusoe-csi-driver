@@ -1,4 +1,4 @@
-package node
+package ssd
 
 import (
 	"errors"
@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/crusoecloud/crusoe-csi-driver/internal/node"
 	"k8s.io/mount-utils"
 )
 
@@ -22,7 +23,7 @@ func (p PublishBlock) Publish() error {
 
 	// Make parent directory for target path
 	// os.MkdirAll will be a noop if the directory already exists
-	mkDirErr := os.MkdirAll(dirPath, newDirPerms)
+	mkDirErr := os.MkdirAll(dirPath, node.NewDirPerms)
 	if mkDirErr != nil {
 		return fmt.Errorf("failed to make directory for target path: %w", mkDirErr)
 	}
@@ -31,7 +32,7 @@ func (p PublishBlock) Publish() error {
 	_, err := os.Stat(p.Request.GetTargetPath())
 	if errors.Is(err, os.ErrNotExist) {
 		// Expose the block volume as a file
-		f, openErr := os.OpenFile(p.Request.GetTargetPath(), os.O_CREATE|os.O_EXCL, os.FileMode(newFilePerms))
+		f, openErr := os.OpenFile(p.Request.GetTargetPath(), os.O_CREATE|os.O_EXCL, os.FileMode(node.NewFilePerms))
 		if openErr != nil {
 			return fmt.Errorf("failed to make file for target path: %w", err)
 		}
@@ -46,7 +47,7 @@ func (p PublishBlock) Publish() error {
 
 	err = p.Mounter.Mount(p.DevicePath, p.Request.GetTargetPath(), "", p.MountOpts)
 	if err != nil {
-		return fmt.Errorf("%w at target path %s: %s", ErrFailedMount, p.Request.GetTargetPath(), err.Error())
+		return fmt.Errorf("%w at target path %s: %s", node.ErrFailedMount, p.Request.GetTargetPath(), err.Error())
 	}
 
 	return nil
