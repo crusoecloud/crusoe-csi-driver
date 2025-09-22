@@ -151,7 +151,7 @@ func newCrusoeClientWithViperConfig() *crusoeapi.APIClient {
 		viper.GetString(CrusoeAPIEndpointFlag),
 		viper.GetString(CrusoeAccessKeyFlag),
 		viper.GetString(CrusoeSecretKeyFlag),
-		common.UserAgent(),
+		common.GetUserAgent(),
 	)
 }
 

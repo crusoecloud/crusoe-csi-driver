@@ -180,3 +180,7 @@ func GetTopologyKey(pluginName, key string) string {
 func TrimPVCPrefix(pvcName string) string {
 	return strings.TrimPrefix(pvcName, "pvc-")
 }
+
+func GetUserAgent() string {
+	return fmt.Sprintf("%s/%s", PluginName, PluginVersion)
+}
