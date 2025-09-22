@@ -134,13 +134,10 @@ func (d *Node) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabilities
 }
 
 func (d *Node) NodeGetInfo(_ context.Context, _ *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+	//nolint:lll // long names
 	topologySegments := map[string]string{
-		common.GetTopologyKey(d.PluginName, common.TopologyLocationKey): d.HostInstance.Location,
-	}
-
-	if d.DiskType == common.DiskTypeFS {
-		//nolint:lll // long names
-		topologySegments[common.GetTopologyKey(d.PluginName, common.TopologySupportsSharedDisksKey)] = strconv.FormatBool(supportsFS(d.HostInstance))
+		common.GetTopologyKey(d.PluginName, common.TopologyLocationKey):            d.HostInstance.Location,
+		common.GetTopologyKey(d.PluginName, common.TopologySupportsSharedDisksKey): strconv.FormatBool(supportsFS(d.HostInstance)),
 	}
 
 	return &csi.NodeGetInfoResponse{
