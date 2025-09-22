@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/crusoecloud/crusoe-csi-driver/internal/node/fs"
+	"github.com/crusoecloud/crusoe-csi-driver/internal/node/ssd"
 	"github.com/google/uuid"
 
 	"github.com/crusoecloud/crusoe-csi-driver/internal/controller"
@@ -207,34 +208,49 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 	}
 
 	if serveNode {
+		// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
 		capabilities := common.BaseNodeCapabilities
 		var maxVolumesPerNode int64
+		var nodeServer csi.NodeServer
 
 		switch common.PluginDiskType {
 		case common.DiskTypeSSD:
 			maxVolumesPerNode = common.MaxSSDVolumesPerNode - 1 // Subtract 1 to allow for the OS/boot disk
+			nodeServer = &ssd.SSDNode{
+				CrusoeClient:      newCrusoeClientWithViperConfig(),
+				CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
+				CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
+				HostInstance:      hostInstance,
+				Capabilities:      capabilities,
+				MaxVolumesPerNode: maxVolumesPerNode,
+				Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
+				Resizer:           mount.NewResizeFs(exec.New()),
+				DiskType:          common.PluginDiskType,
+				PluginName:        common.PluginName,
+				PluginVersion:     common.PluginVersion,
+			}
 		case common.DiskTypeFS:
 			maxVolumesPerNode = common.MaxFSVolumesPerNode
+			nodeServer = &fs.FSNode{
+				CrusoeClient:      newCrusoeClientWithViperConfig(),
+				CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
+				CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
+				HostInstance:      hostInstance,
+				Capabilities:      capabilities,
+				MaxVolumesPerNode: maxVolumesPerNode,
+				Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
+				Resizer:           mount.NewResizeFs(exec.New()),
+				DiskType:          common.PluginDiskType,
+				PluginName:        common.PluginName,
+				PluginVersion:     common.PluginVersion,
+			}
 		default:
 			// Switch is intended to be exhaustive, reaching this case is a bug
 			panic(fmt.Sprintf(
 				"Switch is intended to be exhaustive, %s is not a valid switch case", common.PluginDiskType))
 		}
 
-		// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
-		csi.RegisterNodeServer(grpcServer, &node.DefaultNode{
-			CrusoeClient:      newCrusoeClientWithViperConfig(),
-			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
-			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
-			HostInstance:      hostInstance,
-			Capabilities:      capabilities,
-			MaxVolumesPerNode: maxVolumesPerNode,
-			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
-			Resizer:           mount.NewResizeFs(exec.New()),
-			DiskType:          common.PluginDiskType,
-			PluginName:        common.PluginName,
-			PluginVersion:     common.PluginVersion,
-		})
+		csi.RegisterNodeServer(grpcServer, nodeServer)
 	}
 }
 
@@ -263,13 +279,7 @@ func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptC
 		return fmt.Errorf("failed to get host instance: %w", err)
 	}
 
-	// hostInstance := &crusoeapi.InstanceV1Alpha5{
-	//	Id:        "test_id",
-	//	ProjectId: "test_project_Id",
-	//	Location:  "test_location",
-	//}
-
-	klog.Infof("Crusoe host instance ID: %+v", hostInstance.Id)
+	klog.Infof("Crusoe host instance ID: %v", hostInstance.Id)
 
 	srv := grpc.NewServer(grpc.ConnectionTimeout(gracefulTimeoutDuration))
 	registerServices(srv, hostInstance)
@@ -278,7 +288,7 @@ func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptC
 		return err
 	}
 
-	klog.Infof("Listening on socket %s", listener.Addr())
+	klog.Infof("Listening on socket: %s", listener.Addr())
 	gRPCErrChan := make(chan error, 1)
 
 	go func() {
@@ -299,7 +309,7 @@ func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptC
 			if errors.Is(gRPCErr, grpc.ErrServerStopped) {
 				klog.Infof("gRPC server stopped")
 				gracefulStopWithTimeout(srv, gracefulTimeoutDuration)
-				klog.Infof("Driver %s version %s stopped", common.PluginName, common.PluginVersion)
+				klog.Infof("Stopped driver %s version %s", common.PluginName, common.PluginVersion)
 
 				return nil
 			}
@@ -308,7 +318,7 @@ func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptC
 		// An error has occurred, attempt to gracefully stop the gRPC server
 		klog.Errorf("Received error from gRPC server: %s", gRPCErr)
 		gracefulStopWithTimeout(srv, gracefulTimeoutDuration)
-		klog.Infof("Driver %s version %s stopped", common.PluginName, common.PluginVersion)
+		klog.Infof("Stopped driver %s version %s", common.PluginName, common.PluginVersion)
 
 		return gRPCErr
 	}
@@ -316,7 +326,7 @@ func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptC
 	// Normal termination flow
 	klog.Infof("Gracefully stopping driver %s version %s", common.PluginName, common.PluginVersion)
 	gracefulStopWithTimeout(srv, gracefulTimeoutDuration)
-	klog.Infof("Driver %s version %s stopped", common.PluginName, common.PluginVersion)
+	klog.Infof("Stopped driver %s version %s", common.PluginName, common.PluginVersion)
 
 	return nil
 }

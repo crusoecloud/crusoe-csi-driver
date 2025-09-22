@@ -79,8 +79,8 @@ func verifyMountedVolumeWithUtilsHelper(mounter *mount.SafeFormatAndMount, targe
 	return nil
 }
 
-// verifyMountedVolumeWithUtils checks if the desired volume is mounted at the target path.
-func verifyMountedVolumeWithUtils(mounter *mount.SafeFormatAndMount, targetPath, deviceFullPath string) (bool, error) {
+// VerifyMountedVolumeWithUtils checks if the desired volume is mounted at the target path.
+func VerifyMountedVolumeWithUtils(mounter *mount.SafeFormatAndMount, targetPath, deviceFullPath string) (bool, error) {
 	// Idempotency check: exit early if the disk is already mounted to the target path
 	verifyErr := verifyMountedVolumeWithUtilsHelper(mounter, targetPath, deviceFullPath)
 
