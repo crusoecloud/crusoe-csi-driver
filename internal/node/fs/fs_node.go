@@ -56,13 +56,12 @@ func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolu
 	klog.Infof("Received request to publish volume: %+v", request)
 
 	nfsEnabled, err := crusoe.GetNFSFlag(d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
-	// TODO: removeme
-	klog.Infof("NFS enabled: %v", nfsEnabled)
 	if err != nil {
 		klog.Errorf("%s: %s", node.ErrFailedToFetchNFSFlag, err)
 
 		return nil, status.Errorf(codes.Internal, "%s: %s", node.ErrFailedToFetchNFSFlag, err)
 	}
+	klog.Infof("NFS enabled: %v", nfsEnabled)
 
 	var mountOpts []string
 
