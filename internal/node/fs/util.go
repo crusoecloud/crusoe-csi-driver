@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	nfsFilesystem        = "nfs"
-	virtioFilesystem     = "virtiofs"
+	nfsFilesystem    = "nfs"
+	virtioFilesystem = "virtiofs"
+	// TODO: CHANGEME BEFORE MERGING!
 	nfsStaticRemotePorts = "204.52.31.176-204.52.31.191"
 	nfsStaticIP          = "204.52.31.176"
 )
