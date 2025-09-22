@@ -70,8 +70,7 @@ func verifyMountedVolumeWithUtilsHelper(mounter *mount.SafeFormatAndMount, targe
 		return fmt.Errorf("failed to get device name from mount: %w", err)
 	}
 
-	// TODO: removeme
-	klog.Warningf("actualDeviceFullPath: %s, deviceFullPath: %s", actualDeviceFullPath, deviceFullPath)
+	klog.Infof("actualDeviceFullPath: %s, deviceFullPath: %s", actualDeviceFullPath, deviceFullPath)
 
 	if actualDeviceFullPath != deviceFullPath {
 		return fmt.Errorf("%w: expected %s, got %s", errDeviceMismatch, deviceFullPath, actualDeviceFullPath)

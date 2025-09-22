@@ -68,7 +68,6 @@ func (p *PublishFilesystem) publishSSDFilesystemVolume() error {
 
 func (p *PublishFilesystem) publishFSFilesystemVolume() error {
 	if p.NfsEnabled {
-		// TODO: removeme
 		klog.Infof("Publishing NFS volume")
 		publishErr := p.publishNFSFilesystemVolume()
 		if publishErr != nil {
