@@ -12,12 +12,14 @@ import (
 )
 
 type PublishFilesystem struct {
-	Mounter    *mount.SafeFormatAndMount
-	Resizer    *mount.ResizeFs
-	Request    *csi.NodePublishVolumeRequest
-	DevicePath string
-	MountOpts  []string
-	NfsEnabled bool
+	Mounter        *mount.SafeFormatAndMount
+	Resizer        *mount.ResizeFs
+	Request        *csi.NodePublishVolumeRequest
+	DevicePath     string
+	NFSRemotePorts string
+	NFSIP          string
+	MountOpts      []string
+	NFSEnabled     bool
 }
 
 func (p *PublishFilesystem) Publish() error {
@@ -34,10 +36,10 @@ func (p *PublishFilesystem) Publish() error {
 	var filesystem string
 
 	switch {
-	case p.NfsEnabled:
+	case p.NFSEnabled:
 		klog.Infof("Publishing NFS volume")
 		// Append mandatory NFS mount options
-		mountOpts = append(mountOpts, nfsMountOpts...)
+		mountOpts = append(mountOpts, getNFSMountOpts(p.NFSRemotePorts)...)
 		filesystem = nfsFilesystem
 	default:
 		klog.Infof("Publishing VirtioFS volume")

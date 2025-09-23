@@ -14,18 +14,16 @@ import (
 const (
 	nfsFilesystem    = "nfs"
 	virtioFilesystem = "virtiofs"
-	// TODO: CHANGEME BEFORE MERGING!
-	nfsStaticRemotePorts = "204.52.31.176-204.52.31.191"
-	nfsStaticIP          = "204.52.31.176"
 )
 
-//nolint:gochecknoglobals // can't construct const slice
-var nfsMountOpts = []string{
-	"vers=3",
-	"nconnect=16",
-	"spread_reads",
-	"spread_writes",
-	fmt.Sprintf("remoteports=%s", nfsStaticRemotePorts),
+func getNFSMountOpts(nfsRemotePorts string) []string {
+	return []string{
+		"vers=3",
+		"nconnect=16",
+		"spread_reads",
+		"spread_writes",
+		fmt.Sprintf("remoteports=%s", nfsRemotePorts),
+	}
 }
 
 func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {
@@ -59,10 +57,10 @@ func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {
 	return false
 }
 
-func getFSDevicePath(request *csi.NodePublishVolumeRequest, supportsNfs bool) (string, error) {
+func getFSDevicePath(request *csi.NodePublishVolumeRequest, supportsNfs bool, nfsIP string) (string, error) {
 	switch {
 	case supportsNfs:
-		return fmt.Sprintf("%s:/volumes/%s", nfsStaticIP, request.GetVolumeId()), nil
+		return fmt.Sprintf("%s:/volumes/%s", nfsIP, request.GetVolumeId()), nil
 	default:
 		volumeContext := request.GetVolumeContext()
 		devicePath, ok := volumeContext[common.VolumeContextDiskNameKey]
