@@ -54,11 +54,15 @@ const (
 	ServicesFlag          = "services"
 	NodeNameFlag          = "node-name"
 	SocketAddressFlag     = "socket-address"
+	NFSRemotePortsFlag    = "nfs-remote-ports"
+	NFSIPFlag             = "nfs-ip"
 )
 
 const (
 	CrusoeAPIEndpointDefault = "https://api.crusoecloud.com/v1alpha5"
 	SocketAddressDefault     = "unix:/tmp/csi.sock"
+	NFSRemotePortsDefault    = "100.64.0.2-100.64.0.17"
+	NFSIPDefault             = "100.64.0.2"
 )
 
 func SetPluginVariables() {

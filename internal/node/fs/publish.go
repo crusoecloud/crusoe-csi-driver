@@ -13,9 +13,11 @@ func nodePublishVolume(
 	resizer *mount.ResizeFs,
 	mountOpts []string,
 	nfsEnabled bool,
+	nfsRemotePorts string,
+	nfsIP string,
 	request *csi.NodePublishVolumeRequest,
 ) error {
-	devicePath, err := getFSDevicePath(request, nfsEnabled)
+	devicePath, err := getFSDevicePath(request, nfsEnabled, nfsIP)
 	if err != nil {
 		return fmt.Errorf("failed to get device path: %w", err)
 	}
@@ -34,12 +36,14 @@ func nodePublishVolume(
 		return fmt.Errorf("%w: %s", node.ErrUnsupportedVolumeCapability, request.GetVolumeCapability())
 	case request.GetVolumeCapability().GetMount() != nil:
 		return (&PublishFilesystem{
-			DevicePath: devicePath,
-			Mounter:    mounter,
-			Resizer:    resizer,
-			MountOpts:  mountOpts,
-			NfsEnabled: nfsEnabled,
-			Request:    request,
+			Mounter:        mounter,
+			Resizer:        resizer,
+			Request:        request,
+			DevicePath:     devicePath,
+			NFSRemotePorts: nfsRemotePorts,
+			NFSIP:          nfsIP,
+			MountOpts:      mountOpts,
+			NFSEnabled:     nfsEnabled,
 		}).Publish()
 	default:
 		return fmt.Errorf("%w: %s", node.ErrUnexpectedVolumeCapability, request.GetVolumeCapability())

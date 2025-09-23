@@ -24,6 +24,8 @@ type Node struct {
 	Mounter           *mount.SafeFormatAndMount
 	Resizer           *mount.ResizeFs
 	CrusoeAPIEndpoint string
+	NFSRemotePorts    string
+	NFSIP             string
 	DiskType          common.DiskType
 	PluginName        string
 	PluginVersion     string
@@ -71,7 +73,7 @@ func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolu
 		mountOpts = append(mountOpts, node.ReadOnlyMountOption, node.NoLoadMountOption)
 	}
 
-	err = nodePublishVolume(d.Mounter, d.Resizer, mountOpts, nfsEnabled, request)
+	err = nodePublishVolume(d.Mounter, d.Resizer, mountOpts, nfsEnabled, d.NFSRemotePorts, d.NFSIP, request)
 	if err != nil {
 		klog.Errorf("failed to publish volume %s: %s", request.GetVolumeId(), err.Error())
 

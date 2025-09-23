@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/controller"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/node/fs"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/node/ssd"
-
-	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 
 	"k8s.io/mount-utils"
 	"k8s.io/utils/exec"
@@ -73,30 +72,32 @@ func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alp
 		nodeServer = &ssd.Node{
 			CrusoeClient:      newCrusoeClientWithViperConfig(),
 			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
-			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
-			HostInstance:      hostInstance,
-			Capabilities:      capabilities,
-			MaxVolumesPerNode: maxVolumesPerNode,
 			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
 			Resizer:           mount.NewResizeFs(exec.New()),
+			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
 			DiskType:          common.PluginDiskType,
 			PluginName:        common.PluginName,
 			PluginVersion:     common.PluginVersion,
+			HostInstance:      hostInstance,
+			Capabilities:      capabilities,
+			MaxVolumesPerNode: maxVolumesPerNode,
 		}
 	case common.DiskTypeFS:
 		maxVolumesPerNode = common.MaxFSVolumesPerNode
 		nodeServer = &fs.Node{
 			CrusoeClient:      newCrusoeClientWithViperConfig(),
 			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
-			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
-			HostInstance:      hostInstance,
-			Capabilities:      capabilities,
-			MaxVolumesPerNode: maxVolumesPerNode,
 			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
 			Resizer:           mount.NewResizeFs(exec.New()),
+			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
+			NFSRemotePorts:    viper.GetString(NFSRemotePortsFlag),
+			NFSIP:             viper.GetString(NFSIPFlag),
 			DiskType:          common.PluginDiskType,
 			PluginName:        common.PluginName,
 			PluginVersion:     common.PluginVersion,
+			HostInstance:      hostInstance,
+			Capabilities:      capabilities,
+			MaxVolumesPerNode: maxVolumesPerNode,
 		}
 	default:
 		// Switch is intended to be exhaustive, reaching this case is a bug
