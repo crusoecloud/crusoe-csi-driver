@@ -58,7 +58,7 @@ func setFlags() {
 	rootCmd.Flags().String(internal.NodeNameFlag, "", "Kubernetes Node Name")
 	rootCmd.Flags().String(internal.SocketAddressFlag, internal.SocketAddressDefault, "CSI Socket Address")
 	rootCmd.Flags().String(internal.NFSRemotePortsFlag, internal.NFSRemotePortsDefault, "NFS Remote Ports")
-	rootCmd.Flags().String(internal.NFSIPFlag, internal.NFSIPDefault, "NFS IP")
+	rootCmd.Flags().String(internal.NFSHostFlag, internal.NFSHostDefault, "NFS Host")
 
 	err = viper.BindPFlags(rootCmd.Flags())
 	if err != nil {

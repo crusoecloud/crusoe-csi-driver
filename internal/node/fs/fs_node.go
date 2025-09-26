@@ -25,7 +25,7 @@ type Node struct {
 	Resizer           *mount.ResizeFs
 	CrusoeAPIEndpoint string
 	NFSRemotePorts    string
-	NFSIP             string
+	NFSHost           string
 	DiskType          common.DiskType
 	PluginName        string
 	PluginVersion     string
@@ -51,13 +51,13 @@ func (d *Node) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVolumeRequ
 	return nil, status.Errorf(codes.Unimplemented, "%s: NodeUnstageVolume", common.ErrNotImplemented)
 }
 
-func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolumeRequest) (
+func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVolumeRequest) (
 	*csi.NodePublishVolumeResponse,
 	error,
 ) {
 	klog.Infof("Received request to publish volume: %+v", request)
 
-	nfsEnabled, err := crusoe.GetNFSFlag(d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
+	nfsEnabled, err := crusoe.GetNFSFlag(ctx, d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
 	if err != nil {
 		klog.Errorf("%s: %s", node.ErrFailedToFetchNFSFlag, err)
 
@@ -73,7 +73,7 @@ func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolu
 		mountOpts = append(mountOpts, node.ReadOnlyMountOption, node.NoLoadMountOption)
 	}
 
-	err = nodePublishVolume(d.Mounter, d.Resizer, mountOpts, nfsEnabled, d.NFSRemotePorts, d.NFSIP, request)
+	err = nodePublishVolume(d.Mounter, d.Resizer, mountOpts, nfsEnabled, d.NFSRemotePorts, d.NFSHost, request)
 	if err != nil {
 		klog.Errorf("failed to publish volume %s: %s", request.GetVolumeId(), err.Error())
 

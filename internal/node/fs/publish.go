@@ -14,10 +14,10 @@ func nodePublishVolume(
 	mountOpts []string,
 	nfsEnabled bool,
 	nfsRemotePorts string,
-	nfsIP string,
+	nfsHost string,
 	request *csi.NodePublishVolumeRequest,
 ) error {
-	devicePath, err := getFSDevicePath(request, nfsEnabled, nfsIP)
+	devicePath, err := getFSDevicePath(request, nfsEnabled, nfsHost)
 	if err != nil {
 		return fmt.Errorf("failed to get device path: %w", err)
 	}
@@ -41,7 +41,7 @@ func nodePublishVolume(
 			Request:        request,
 			DevicePath:     devicePath,
 			NFSRemotePorts: nfsRemotePorts,
-			NFSIP:          nfsIP,
+			NFSHost:        nfsHost,
 			MountOpts:      mountOpts,
 			NFSEnabled:     nfsEnabled,
 		}).Publish()

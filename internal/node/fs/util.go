@@ -45,7 +45,7 @@ func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {
 	}
 
 	// There are 4 slices in a GB200 instance
-	if typeSegments[0] == "gb200-186gb-nvl" && typeSegments[1] == "4x" {
+	if strings.HasPrefix(typeSegments[0], "gb200-186gb") && typeSegments[1] == "4x" {
 		return true
 	}
 
