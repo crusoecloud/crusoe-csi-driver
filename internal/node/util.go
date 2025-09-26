@@ -44,6 +44,17 @@ func nodePublishBlockVolume(serialNumber string,
 	request *csi.NodePublishVolumeRequest,
 ) error {
 	dirPath := filepath.Dir(request.GetTargetPath())
+	devicePath := getSSDDevicePath(serialNumber)
+
+	alreadyMounted, verifyErr := VerifyMountedVolumeWithUtils(mounter, request.GetTargetPath(), devicePath)
+	if verifyErr != nil {
+		return fmt.Errorf("failed to verify mounted volume: %w", verifyErr)
+	}
+
+	if alreadyMounted {
+		// Correct volume is already mounted, exit early
+		return nil
+	}
 
 	// Make parent directory for target path
 	// os.MkdirAll will be a noop if the directory already exists
@@ -67,8 +78,6 @@ func nodePublishBlockVolume(serialNumber string,
 		return fmt.Errorf("failed to check if target path exists: %w", err)
 	}
 
-	devicePath := getSSDDevicePath(serialNumber)
-
 	mountOpts = append(mountOpts, "bind")
 	mountOpts = append(mountOpts, request.GetVolumeCapability().GetMount().GetMountFlags()...)
 	err = mounter.Mount(devicePath, request.GetTargetPath(), "", mountOpts)
@@ -79,6 +88,7 @@ func nodePublishBlockVolume(serialNumber string,
 	return nil
 }
 
+//nolint:cyclop // want to keep filesystem logic together
 func nodePublishFilesystemVolume(serialNumber string,
 	mounter *mount.SafeFormatAndMount,
 	resizer *mount.ResizeFs,
@@ -86,6 +96,28 @@ func nodePublishFilesystemVolume(serialNumber string,
 	diskType common.DiskType,
 	request *csi.NodePublishVolumeRequest,
 ) error {
+	var devicePath string
+	var ok bool
+	if diskType == common.DiskTypeFS {
+		volumeContext := request.GetVolumeContext()
+		devicePath, ok = volumeContext[common.VolumeContextDiskNameKey]
+		if !ok {
+			return errVolumeMissingName
+		}
+	} else {
+		devicePath = getSSDDevicePath(serialNumber)
+	}
+
+	alreadyMounted, verifyErr := VerifyMountedVolumeWithUtils(mounter, request.GetTargetPath(), devicePath)
+	if verifyErr != nil {
+		return fmt.Errorf("failed to verify mounted volume: %w", verifyErr)
+	}
+
+	if alreadyMounted {
+		// Correct volume is already mounted, exit early
+		return nil
+	}
+
 	// Make parent directory for target path
 	// os.MkdirAll will be a noop if the directory already exists
 	mkDirErr := os.MkdirAll(request.GetTargetPath(), newDirPerms)
@@ -97,18 +129,11 @@ func nodePublishFilesystemVolume(serialNumber string,
 
 	//nolint:nestif // error handling
 	if diskType == common.DiskTypeFS {
-		volumeContext := request.GetVolumeContext()
-		diskName, ok := volumeContext[common.VolumeContextDiskNameKey]
-		if !ok {
-			return errVolumeMissingName
-		}
-
-		err := mounter.Mount(diskName, request.GetTargetPath(), fsDiskFilesystem, mountOpts)
+		err := mounter.Mount(devicePath, request.GetTargetPath(), fsDiskFilesystem, mountOpts)
 		if err != nil {
 			return fmt.Errorf("%w at target path %s: %s", errFailedMount, request.GetTargetPath(), err.Error())
 		}
 	} else {
-		devicePath := getSSDDevicePath(serialNumber)
 		err := mounter.FormatAndMount(devicePath,
 			request.GetTargetPath(),
 			request.GetVolumeCapability().GetMount().GetFsType(),
@@ -119,12 +144,12 @@ func nodePublishFilesystemVolume(serialNumber string,
 
 		// Resize the filesystem to span the entire disk
 		// The size of the underlying disk may have changed due to volume expansion (offline)
-		ok, err := resizer.Resize(devicePath, request.GetTargetPath())
+		resizeOk, err := resizer.Resize(devicePath, request.GetTargetPath())
 		if err != nil {
 			return fmt.Errorf("%w at target path %s: %w", ErrFailedResize, request.GetTargetPath(), err)
 		}
 
-		if !ok {
+		if !resizeOk {
 			return fmt.Errorf("%w: %s", ErrFailedResize, request.GetTargetPath())
 		}
 	}
