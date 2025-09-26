@@ -91,7 +91,7 @@ func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alp
 			Resizer:           mount.NewResizeFs(exec.New()),
 			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
 			NFSRemotePorts:    viper.GetString(NFSRemotePortsFlag),
-			NFSIP:             viper.GetString(NFSIPFlag),
+			NFSHost:           viper.GetString(NFSHostFlag),
 			DiskType:          common.PluginDiskType,
 			PluginName:        common.PluginName,
 			PluginVersion:     common.PluginVersion,

@@ -23,9 +23,8 @@ type NfsFlagResponse struct {
 }
 
 // GetNFSFlag returns true if the project has NFS enabled.
-func GetNFSFlag(crusoeHTTPClient *http.Client, apiEndpoint, projectID string) (bool, error) {
+func GetNFSFlag(ctx context.Context, crusoeHTTPClient *http.Client, apiEndpoint, projectID string) (bool, error) {
 	nfsFlagRoute := fmt.Sprintf(nfsFlagRouteTemplate, apiEndpoint, projectID)
-	ctx := context.Background()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, nfsFlagRoute, http.NoBody)
 	if err != nil {
 		return false, fmt.Errorf("%w: %w", errCreateNfsFlagRequest, err)
@@ -35,9 +34,9 @@ func GetNFSFlag(crusoeHTTPClient *http.Client, apiEndpoint, projectID string) (b
 		return false, fmt.Errorf("%w: %w", errGetNfsFlag, err)
 	}
 
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -17,7 +17,7 @@ type PublishFilesystem struct {
 	Request        *csi.NodePublishVolumeRequest
 	DevicePath     string
 	NFSRemotePorts string
-	NFSIP          string
+	NFSHost        string
 	MountOpts      []string
 	NFSEnabled     bool
 }
