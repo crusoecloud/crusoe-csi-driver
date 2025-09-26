@@ -25,7 +25,7 @@ func isMountPointQuick(mounter *mount.SafeFormatAndMount, targetPath string) (bo
 	// Will not suggest a mount is present when it is not.
 	//
 	// TL;DR
-	// true: potentially not a mount point
+	// true: potentially a mount point, potentially not a mount point
 	// false: definitely is a mount point
 	isLikelyNotMountPoint, err := mounter.IsLikelyNotMountPoint(targetPath)
 	if err != nil {
