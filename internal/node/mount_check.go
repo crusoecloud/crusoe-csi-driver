@@ -105,6 +105,7 @@ func VerifyMountedVolumeWithUtils(mounter *mount.SafeFormatAndMount, targetPath,
 		}
 
 		return false, nil
+
 	// Failed to verify mounted volume
 	default:
 		return false, verifyErr
