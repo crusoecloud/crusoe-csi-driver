@@ -54,11 +54,15 @@ const (
 	ServicesFlag          = "services"
 	NodeNameFlag          = "node-name"
 	SocketAddressFlag     = "socket-address"
+	NFSRemotePortsFlag    = "nfs-remote-ports"
+	NFSHostFlag           = "nfs-host"
 )
 
 const (
 	CrusoeAPIEndpointDefault = "https://api.crusoecloud.com/v1alpha5"
 	SocketAddressDefault     = "unix:/tmp/csi.sock"
+	NFSRemotePortsDefault    = "100.64.0.2-100.64.0.17"
+	NFSHostDefault           = "100.64.0.2"
 )
 
 func SetPluginVariables() {
@@ -89,7 +93,7 @@ func RunMain(_ *cobra.Command, _ []string) error {
 	signal.Notify(interruptChan, os.Interrupt)
 	signal.Notify(interruptChan, syscall.SIGTERM)
 
-	klog.Infof("Initializing driver %s %s", common.PluginName, common.PluginVersion)
+	klog.Infof("Initializing driver %s version %s", common.PluginName, common.PluginVersion)
 
 	// Serve CSI gRPC server
 	return Serve(rootCtx, rootCtxCancel, interruptChan)
