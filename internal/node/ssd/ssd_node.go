@@ -57,14 +57,8 @@ func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolu
 
 	if request.GetReadonly() {
 		// Read-only volumes cannot be written to in any way
-		mountOpts = append(mountOpts, node.ReadOnlyMountOption)
-
-		if mountCap := request.GetVolumeCapability().GetMount(); mountCap != nil {
-			fsType := mountCap.GetFsType()
-			if fsType == "ext4" {
-				mountOpts = append(mountOpts, node.NoLoadMountOption)
-			}
-		}
+		// We should not attempt to replay the journal
+		mountOpts = append(mountOpts, node.ReadOnlyMountOption, node.NoLoadMountOption)
 	}
 
 	err := nodePublishVolume(d.Mounter, d.Resizer, mountOpts, request)
