@@ -69,8 +69,7 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 
 	if request.GetReadonly() {
 		// Read-only volumes cannot be written to in any way
-		// We should not attempt to replay the journal
-		mountOpts = append(mountOpts, node.ReadOnlyMountOption, node.NoLoadMountOption)
+		mountOpts = append(mountOpts, node.ReadOnlyMountOption)
 	}
 
 	err = nodePublishVolume(d.Mounter, d.Resizer, mountOpts, nfsEnabled, d.NFSRemotePorts, d.NFSHost, request)
