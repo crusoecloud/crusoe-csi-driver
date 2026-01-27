@@ -45,11 +45,16 @@ func getFlag(ctx context.Context, crusoeHTTPClient *http.Client, flagRoute strin
 		return false, fmt.Errorf("%w: %w", errReadFlagResponse, err)
 	}
 
+	// Check HTTP status code before unmarshaling
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("%w: HTTP %d: %s", errGetFlag, resp.StatusCode, string(bodyBytes))
+	}
+
 	var flagResponse NfsFlagResponse
 
 	unmarshalErr := json.Unmarshal(bodyBytes, &flagResponse)
 	if unmarshalErr != nil {
-		return false, fmt.Errorf("%w: %w", errUnmarshalFlag, unmarshalErr)
+		return false, fmt.Errorf("%w: %w (response body: %s)", errUnmarshalFlag, unmarshalErr, string(bodyBytes))
 	}
 
 	return flagResponse.Status, nil
