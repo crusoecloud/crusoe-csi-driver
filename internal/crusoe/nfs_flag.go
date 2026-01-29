@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -27,6 +29,8 @@ type NfsFlagResponse struct {
 
 // getFlag is a helper function to fetch a boolean flag from the API.
 func getFlag(ctx context.Context, crusoeHTTPClient *http.Client, flagRoute string) (bool, error) {
+	klog.Infof("Fetching flag from URL: %s", flagRoute)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, flagRoute, http.NoBody)
 	if err != nil {
 		return false, fmt.Errorf("%w: %w", errCreateFlagRequest, err)
@@ -45,6 +49,10 @@ func getFlag(ctx context.Context, crusoeHTTPClient *http.Client, flagRoute strin
 		return false, fmt.Errorf("%w: %w", errReadFlagResponse, err)
 	}
 
+	klog.Infof("Flag API response - Status: %d, Content-Type: %s, Body length: %d bytes",
+		resp.StatusCode, resp.Header.Get("Content-Type"), len(bodyBytes))
+	klog.Infof("Flag API raw response body: %q", string(bodyBytes))
+
 	// Check HTTP status code before unmarshaling
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("%w: HTTP %d: %s", errGetFlag, resp.StatusCode, string(bodyBytes))
@@ -54,7 +62,7 @@ func getFlag(ctx context.Context, crusoeHTTPClient *http.Client, flagRoute strin
 
 	unmarshalErr := json.Unmarshal(bodyBytes, &flagResponse)
 	if unmarshalErr != nil {
-		return false, fmt.Errorf("%w: %w (response body: %s)", errUnmarshalFlag, unmarshalErr, string(bodyBytes))
+		return false, fmt.Errorf("%w: %w (response body: %q)", errUnmarshalFlag, unmarshalErr, string(bodyBytes))
 	}
 
 	return flagResponse.Status, nil
