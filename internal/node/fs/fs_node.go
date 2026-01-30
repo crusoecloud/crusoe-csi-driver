@@ -71,16 +71,6 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 	}
 	klog.Infof("NFS enabled: %v", nfsEnabled)
 
-	vastUseSecondaryCluster, err := crusoe.GetVastUseSecondaryClusterFlag(
-		ctx, d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId,
-	)
-	if err != nil {
-		klog.Errorf("failed to fetch vast-use-secondary-cluster flag: %s", err)
-
-		return nil, status.Errorf(codes.Internal, "failed to fetch vast-use-secondary-cluster flag: %s", err)
-	}
-	klog.Infof("vast-use-secondary-cluster enabled: %v", vastUseSecondaryCluster)
-
 	var mountOpts []string
 
 	if request.GetReadonly() {
@@ -88,12 +78,16 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 		mountOpts = append(mountOpts, node.ReadOnlyMountOption)
 	}
 
-	// Use DNS for ICAT locations instead of IP-based NFSHost if feature flag is enabled
+	// Use DNS for ICAT locations instead of IP-based NFSHost
 	nfsHost := d.NFSHost
 	nfsRemotePorts := d.NFSRemotePorts
-	if vastUseSecondaryCluster && d.HostInstance.Location == icatLocation {
+	klog.Infof("Host instance location: %q, checking against icatLocation: %q", d.HostInstance.Location, icatLocation)
+	if d.HostInstance.Location == icatLocation {
+		klog.Infof("Using DNS-based NFS host for ICAT location: %s", crusoeCloudDNSNFSHost)
 		nfsHost = crusoeCloudDNSNFSHost
 		nfsRemotePorts = dnsRemotePorts
+	} else {
+		klog.Infof("Using IP-based NFS host: %s with remote ports: %s", nfsHost, nfsRemotePorts)
 	}
 
 	err = nodePublishVolume(d.Mounter, d.Resizer, mountOpts, nfsEnabled, nfsRemotePorts, nfsHost, request)
