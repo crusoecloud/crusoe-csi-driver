@@ -18,7 +18,7 @@ import (
 
 const (
 	crusoeCloudDNSNFSHost = "nfs.crusoecloudcompute.com"
-	icatLocation          = "icat-m"
+	icatLocation          = "eu-iceland1-a"
 	dnsRemotePorts        = "dns"
 )
 
