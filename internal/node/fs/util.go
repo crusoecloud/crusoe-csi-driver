@@ -17,13 +17,19 @@ const (
 )
 
 func getNFSMountOpts(nfsRemotePorts string) []string {
-	return []string{
+	opts := []string{
 		"vers=3",
 		"nconnect=16",
 		"spread_reads",
 		"spread_writes",
-		fmt.Sprintf("remoteports=%s", nfsRemotePorts),
 	}
+
+	// Only add remoteports if specified
+	if nfsRemotePorts != "" {
+		opts = append(opts, fmt.Sprintf("remoteports=%s", nfsRemotePorts))
+	}
+
+	return opts
 }
 
 func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {

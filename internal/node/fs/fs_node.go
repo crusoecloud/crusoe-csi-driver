@@ -16,6 +16,12 @@ import (
 	"k8s.io/mount-utils"
 )
 
+const (
+	crusoeCloudDNSNFSHost = "nfs.crusoecloudcompute.com"
+	icatLocation          = "eu-iceland1-a"
+	dnsRemotePorts        = "dns"
+)
+
 type Node struct {
 	csi.UnimplementedNodeServer
 	CrusoeClient      *crusoeapi.APIClient
@@ -72,7 +78,19 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 		mountOpts = append(mountOpts, node.ReadOnlyMountOption)
 	}
 
-	err = nodePublishVolume(d.Mounter, d.Resizer, mountOpts, nfsEnabled, d.NFSRemotePorts, d.NFSHost, request)
+	// Use DNS for ICAT locations instead of IP-based NFSHost
+	nfsHost := d.NFSHost
+	nfsRemotePorts := d.NFSRemotePorts
+	klog.Infof("Host instance location: %q, checking against icatLocation: %q", d.HostInstance.Location, icatLocation)
+	if d.HostInstance.Location == icatLocation {
+		klog.Infof("Using DNS-based NFS host for ICAT location: %s", crusoeCloudDNSNFSHost)
+		nfsHost = crusoeCloudDNSNFSHost
+		nfsRemotePorts = dnsRemotePorts
+	} else {
+		klog.Infof("Using IP-based NFS host: %s with remote ports: %s", nfsHost, nfsRemotePorts)
+	}
+
+	err = nodePublishVolume(d.Mounter, d.Resizer, mountOpts, nfsEnabled, nfsRemotePorts, nfsHost, request)
 	if err != nil {
 		klog.Errorf("failed to publish volume %s: %s", request.GetVolumeId(), err.Error())
 
