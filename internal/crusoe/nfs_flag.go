@@ -13,7 +13,7 @@ import (
 
 const (
 	nfsFlagRouteTemplate                     = "%s/projects/%s/storage/nfs/is-using-nfs"
-	vastUseSecondaryClusterFlagRouteTemplate = "%s/projects/%s/storage/nfs/vast-use-secondary-cluster"
+	vastUseSecondaryClusterFlagRouteTemplate = "%s/projects/%s/storage/nfs/is-using-secondary-cluster"
 	DEBUG                                    = 8
 )
 
@@ -24,8 +24,9 @@ var (
 	errUnmarshalFlag     = errors.New("failed to unmarshal flag response")
 )
 
-type NfsFlagResponse struct {
-	Status bool `json:"status"`
+type FlagResponse struct {
+	Status  bool `json:"status,omitempty"`
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // getFlag is a helper function to fetch a boolean flag from the API.
@@ -59,14 +60,14 @@ func getFlag(ctx context.Context, crusoeHTTPClient *http.Client, flagRoute strin
 		return false, fmt.Errorf("%w: HTTP %d: %s", errGetFlag, resp.StatusCode, string(bodyBytes))
 	}
 
-	var flagResponse NfsFlagResponse
+	var flagResponse FlagResponse
 
 	unmarshalErr := json.Unmarshal(bodyBytes, &flagResponse)
 	if unmarshalErr != nil {
 		return false, fmt.Errorf("%w: %w (response body: %q)", errUnmarshalFlag, unmarshalErr, string(bodyBytes))
 	}
 
-	return flagResponse.Status, nil
+	return flagResponse.Status || flagResponse.Enabled, nil
 }
 
 // GetNFSFlag returns true if the project has NFS enabled.
