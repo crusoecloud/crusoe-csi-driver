@@ -82,7 +82,7 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 	nfsHost := d.NFSHost
 	nfsRemotePorts := d.NFSRemotePorts
 	klog.Infof("Host instance location: %q, checking against icatLocation: %q", d.HostInstance.Location, icatLocation)
-	if d.HostInstance.Location == icatLocation {
+	if d.useDNSForMount(ctx) {
 		klog.Infof("Using DNS-based NFS host for ICAT location: %s", crusoeCloudDNSNFSHost)
 		nfsHost = crusoeCloudDNSNFSHost
 		nfsRemotePorts = dnsRemotePorts
@@ -100,6 +100,18 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 	klog.Infof("Successfully published volume: %s", request.GetVolumeId())
 
 	return &csi.NodePublishVolumeResponse{}, nil
+}
+
+func (d *Node) useDNSForMount(ctx context.Context) bool {
+	useSecondaryVast, err := crusoe.GetVastUseSecondaryClusterFlag(
+		ctx, d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
+	if err != nil {
+		klog.Errorf("failed to fetch VastUseSecondaryCluster flag: %s", err.Error())
+
+		return false
+	}
+
+	return useSecondaryVast && d.HostInstance.Location == icatLocation
 }
 
 func (d *Node) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublishVolumeRequest) (

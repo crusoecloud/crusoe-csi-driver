@@ -14,6 +14,7 @@ import (
 const (
 	nfsFlagRouteTemplate                     = "%s/projects/%s/storage/nfs/is-using-nfs"
 	vastUseSecondaryClusterFlagRouteTemplate = "%s/projects/%s/storage/nfs/vast-use-secondary-cluster"
+	DEBUG                                    = 8
 )
 
 var (
@@ -51,7 +52,7 @@ func getFlag(ctx context.Context, crusoeHTTPClient *http.Client, flagRoute strin
 
 	klog.Infof("Flag API response - Status: %d, Content-Type: %s, Body length: %d bytes",
 		resp.StatusCode, resp.Header.Get("Content-Type"), len(bodyBytes))
-	klog.Infof("Flag API raw response body: %q", string(bodyBytes))
+	klog.V(DEBUG).Infof("Flag API raw response body: %q", string(bodyBytes))
 
 	// Check HTTP status code before unmarshaling
 	if resp.StatusCode != http.StatusOK {
