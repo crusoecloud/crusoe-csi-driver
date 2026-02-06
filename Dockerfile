@@ -23,17 +23,14 @@ RUN make cross
 ################################################################
 
 # Dockerfile.goreleaser should be kept roughly in sync
-FROM ubuntu:24.04
+FROM alpine:3.20.3
 
 # Need to get these updates for k8s mount-utils library to work properly
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        e2fsprogs \
-        nfs-common \
-        util-linux \
-        xfsprogs && \
-    rm -rf /var/lib/apt/lists/*
+RUN apk update && \
+    apk add --no-cache e2fsprogs-extra~=1.47.0 && \
+    apk add --no-cache blkid~=2.40.1 && \
+    apk add --no-cache xfsprogs-extra~=6.8.0 && \
+    rm -rf /var/cache/apk/*
 
 COPY --from=builder /build/dist/crusoe-csi-driver /usr/local/go/bin/crusoe-csi-driver
 
