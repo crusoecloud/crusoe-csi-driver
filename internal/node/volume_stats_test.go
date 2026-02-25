@@ -1,4 +1,4 @@
-package node
+package node_test
 
 import (
 	"os"
@@ -6,12 +6,15 @@ import (
 	"testing"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/crusoecloud/crusoe-csi-driver/internal/node"
 )
 
 func TestGetFilesystemStats(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
-	usage, err := GetFilesystemStats(dir)
+	usage, err := node.GetFilesystemStats(dir)
 	if err != nil {
 		t.Fatalf("GetFilesystemStats(%s) returned error: %v", dir, err)
 	}
@@ -49,16 +52,20 @@ func TestGetFilesystemStats(t *testing.T) {
 }
 
 func TestGetFilesystemStatsNonExistentPath(t *testing.T) {
-	_, err := GetFilesystemStats("/nonexistent/path/that/does/not/exist")
+	t.Parallel()
+
+	_, err := node.GetFilesystemStats("/nonexistent/path/that/does/not/exist")
 	if err == nil {
 		t.Fatal("expected error for non-existent path, got nil")
 	}
 }
 
 func TestIsBlockDeviceDirectory(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
-	isBlock, err := IsBlockDevice(dir)
+	isBlock, err := node.IsBlockDevice(dir)
 	if err != nil {
 		t.Fatalf("IsBlockDevice(%s) returned error: %v", dir, err)
 	}
@@ -69,14 +76,16 @@ func TestIsBlockDeviceDirectory(t *testing.T) {
 }
 
 func TestIsBlockDeviceFile(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "blockdev")
 
-	if err := os.WriteFile(filePath, []byte("data"), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte("data"), 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	isBlock, err := IsBlockDevice(filePath)
+	isBlock, err := node.IsBlockDevice(filePath)
 	if err != nil {
 		t.Fatalf("IsBlockDevice(%s) returned error: %v", filePath, err)
 	}
@@ -87,7 +96,9 @@ func TestIsBlockDeviceFile(t *testing.T) {
 }
 
 func TestIsBlockDeviceNonExistent(t *testing.T) {
-	_, err := IsBlockDevice("/nonexistent/path")
+	t.Parallel()
+
+	_, err := node.IsBlockDevice("/nonexistent/path")
 	if err == nil {
 		t.Fatal("expected error for non-existent path, got nil")
 	}

@@ -99,11 +99,11 @@ func (d *Node) NodeGetVolumeStats(_ context.Context, request *csi.NodeGetVolumeS
 	error,
 ) {
 	if request.GetVolumeId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "volume ID must be provided")
+		return nil, status.Errorf(codes.InvalidArgument, "volume ID must be provided")
 	}
 
 	if request.GetVolumePath() == "" {
-		return nil, status.Error(codes.InvalidArgument, "volume path must be provided")
+		return nil, status.Errorf(codes.InvalidArgument, "volume path must be provided")
 	}
 
 	if _, err := os.Stat(request.GetVolumePath()); os.IsNotExist(err) {

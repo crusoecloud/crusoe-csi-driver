@@ -17,12 +17,12 @@ func GetFilesystemStats(volumePath string) ([]*csi.VolumeUsage, error) {
 	}
 
 	bsize := int64(statfs.Bsize)
-	availableBytes := int64(statfs.Bavail) * bsize
-	totalBytes := int64(statfs.Blocks) * bsize
+	availableBytes := int64(statfs.Bavail) * bsize //nolint:gosec // filesystem values won't overflow int64
+	totalBytes := int64(statfs.Blocks) * bsize     //nolint:gosec // filesystem values won't overflow int64
 	usedBytes := totalBytes - availableBytes
 
-	availableInodes := int64(statfs.Ffree)
-	totalInodes := int64(statfs.Files)
+	availableInodes := int64(statfs.Ffree) //nolint:gosec // filesystem values won't overflow int64
+	totalInodes := int64(statfs.Files)     //nolint:gosec // filesystem values won't overflow int64
 	usedInodes := totalInodes - availableInodes
 
 	return []*csi.VolumeUsage{
