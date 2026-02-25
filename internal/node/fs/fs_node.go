@@ -3,6 +3,7 @@ package fs
 import (
 	"context"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -134,13 +135,30 @@ func (d *Node) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublish
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-func (d *Node) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolumeStatsRequest) (
+func (d *Node) NodeGetVolumeStats(_ context.Context, request *csi.NodeGetVolumeStatsRequest) (
 	*csi.NodeGetVolumeStatsResponse,
 	error,
 ) {
-	klog.Errorf("%s: NodeGetVolumeStats", common.ErrNotImplemented)
+	if request.GetVolumeId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "volume ID must be provided")
+	}
 
-	return nil, status.Errorf(codes.Unimplemented, "%s: NodeGetVolumeStats", common.ErrNotImplemented)
+	if request.GetVolumePath() == "" {
+		return nil, status.Error(codes.InvalidArgument, "volume path must be provided")
+	}
+
+	if _, err := os.Stat(request.GetVolumePath()); os.IsNotExist(err) {
+		return nil, status.Errorf(codes.NotFound, "volume path %s does not exist", request.GetVolumePath())
+	}
+
+	usage, err := node.GetFilesystemStats(request.GetVolumePath())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get volume stats: %s", err)
+	}
+
+	return &csi.NodeGetVolumeStatsResponse{
+		Usage: usage,
+	}, nil
 }
 
 // NodeExpandVolume This function is currently unused.

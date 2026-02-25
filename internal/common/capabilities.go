@@ -54,6 +54,7 @@ var BaseNodeCapabilities = []*csi.NodeServiceCapability{
 			},
 		},
 	},
+	&NodeCapabilityGetVolumeStats,
 }
 
 //nolint:gochecknoglobals  // can't construct const struct
@@ -79,6 +80,15 @@ var PluginCapabilityVolumeExpansionOffline = csi.PluginCapability{
 	Type: &csi.PluginCapability_VolumeExpansion_{
 		VolumeExpansion: &csi.PluginCapability_VolumeExpansion{
 			Type: csi.PluginCapability_VolumeExpansion_OFFLINE,
+		},
+	},
+}
+
+//nolint:gochecknoglobals  // can't construct const struct
+var NodeCapabilityGetVolumeStats = csi.NodeServiceCapability{
+	Type: &csi.NodeServiceCapability_Rpc{
+		Rpc: &csi.NodeServiceCapability_RPC{
+			Type: csi.NodeServiceCapability_RPC_GET_VOLUME_STATS,
 		},
 	},
 }
