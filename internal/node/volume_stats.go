@@ -29,10 +29,12 @@ func GetFilesystemVolumeStats(volumePath string) (*csi.NodeGetVolumeStatsRespons
 		return nil, status.Errorf(codes.Internal, "%s: %s", ErrStatfs, err)
 	}
 
+	bsize := int64(statfs.Bsize) //nolint:unconvert,nolintlint // Bsize is int64 on linux, uint32 on darwin
+
 	//nolint:gosec // filesystem stats will not exceed int64 range
-	availableBytes := int64(statfs.Bavail) * int64(statfs.Bsize)
+	availableBytes := int64(statfs.Bavail) * bsize
 	//nolint:gosec // filesystem stats will not exceed int64 range
-	totalBytes := int64(statfs.Blocks) * int64(statfs.Bsize)
+	totalBytes := int64(statfs.Blocks) * bsize
 	usedBytes := totalBytes - availableBytes
 
 	//nolint:gosec // filesystem stats will not exceed int64 range
