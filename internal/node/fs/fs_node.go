@@ -134,13 +134,12 @@ func (d *Node) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublish
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-func (d *Node) NodeGetVolumeStats(_ context.Context, _ *csi.NodeGetVolumeStatsRequest) (
+func (d *Node) NodeGetVolumeStats(_ context.Context, req *csi.NodeGetVolumeStatsRequest) (
 	*csi.NodeGetVolumeStatsResponse,
 	error,
 ) {
-	klog.Errorf("%s: NodeGetVolumeStats", common.ErrNotImplemented)
-
-	return nil, status.Errorf(codes.Unimplemented, "%s: NodeGetVolumeStats", common.ErrNotImplemented)
+	//nolint:wrapcheck // error is already a gRPC status; wrapping would lose the status code
+	return node.GetVolumeStats(req)
 }
 
 // NodeExpandVolume This function is currently unused.

@@ -54,6 +54,13 @@ var BaseNodeCapabilities = []*csi.NodeServiceCapability{
 			},
 		},
 	},
+	{
+		Type: &csi.NodeServiceCapability_Rpc{
+			Rpc: &csi.NodeServiceCapability_RPC{
+				Type: csi.NodeServiceCapability_RPC_GET_VOLUME_STATS,
+			},
+		},
+	},
 }
 
 //nolint:gochecknoglobals  // can't construct const struct
