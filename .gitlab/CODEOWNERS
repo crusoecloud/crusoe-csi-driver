@@ -1,7 +1,4 @@
-# default = everyone is codeowner
-* @crusoeenergy/island
-
-.gitlab/CODEOWNERS @bsherrycrusoe @ksosnowski3 @dpattishall @crusoeenergy/squads/managed-orchestration
+.gitlab/CODEOWNERS @crusoeenergy/squads/managed-orchestration
 
 # more restrictive ownership for adding dependencies and changing ci/build
 .gitlab-ci.yml     @crusoeenergy/squads/managed-orchestration
