@@ -2,7 +2,7 @@
 # STEP 1: build crusoe-csi-driver binary #
 ##########################################
 
-FROM golang:1.24.0 AS builder
+FROM golang:1.24.13 AS builder
 
 ARG CRUSOE_CSI_DRIVER_VERSION
 ENV CRUSOE_CSI_DRIVER_VERSION=${CRUSOE_CSI_DRIVER_VERSION}
@@ -26,7 +26,7 @@ RUN make cross
 FROM alpine:3.20.3
 
 # Need to get these updates for k8s mount-utils library to work properly
-RUN apk update && \
+RUN apk upgrade --no-cache && \
     apk add --no-cache e2fsprogs-extra~=1.47.0 && \
     apk add --no-cache blkid~=2.40.1 && \
     apk add --no-cache xfsprogs-extra~=6.8.0 && \
