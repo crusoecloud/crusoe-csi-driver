@@ -86,6 +86,8 @@ func FindDiskByIDFallible(ctx context.Context,
 	return &disks.Items[0], nil
 }
 
+var ErrInvalidBlockSize = errors.New("invalid block size: must be 512 or 4096")
+
 func GetCreateDiskRequest(request *csi.CreateVolumeRequest,
 	location string,
 	diskType common.DiskType,
@@ -98,7 +100,10 @@ func GetCreateDiskRequest(request *csi.CreateVolumeRequest,
 	var blockSize int64
 
 	if diskType == common.DiskTypeSSD {
-		blockSize = common.BlockSizeSSD // TODO: Support different block sizes
+		blockSize, err = parseBlockSize(request.GetParameters())
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &crusoeapi.DisksPostRequestV1Alpha5{
@@ -108,6 +113,26 @@ func GetCreateDiskRequest(request *csi.CreateVolumeRequest,
 		Size:      fmt.Sprintf("%dGiB", requestSizeGiB),
 		Type_:     string(diskType),
 	}, nil
+}
+
+// parseBlockSize extracts and validates block size from StorageClass parameters.
+// Returns BlockSizeSSD (512) by default if not specified.
+func parseBlockSize(parameters map[string]string) (int64, error) {
+	blockSizeStr, ok := parameters[common.ParameterBlockSize]
+	if !ok || blockSizeStr == "" {
+		return common.BlockSizeSSD, nil
+	}
+
+	blockSize, err := strconv.ParseInt(blockSizeStr, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %s", ErrInvalidBlockSize, blockSizeStr)
+	}
+
+	if blockSize != common.BlockSizeSSD && blockSize != common.BlockSizeSSDLegacy {
+		return 0, fmt.Errorf("%w: got %d", ErrInvalidBlockSize, blockSize)
+	}
+
+	return blockSize, nil
 }
 
 func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
@@ -120,8 +145,12 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 		return ErrDiskDifferentName
 	}
 
-	// TODO: Support different block sizes
-	if disk.Type_ == string(common.DiskTypeSSD) && disk.BlockSize != common.BlockSizeSSD {
+	// Accept both new (512) and legacy (4096) block sizes for backward compatibility
+	// New disks are created with 512, but existing disks may have 4096
+	if disk.Type_ == string(common.DiskTypeSSD) &&
+		disk.BlockSize != common.BlockSizeSSD &&
+		disk.BlockSize != common.BlockSizeSSDLegacy {
+
 		return ErrDiskDifferentBlockSize
 	}
 

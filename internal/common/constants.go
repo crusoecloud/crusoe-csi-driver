@@ -8,7 +8,8 @@ import (
 const (
 	NumBytesInGiB       = 1024 * 1024 * 1024
 	NumGiBInTiB         = 1024
-	BlockSizeSSD        = 4096
+	BlockSizeSSD        = 512  // Changed from 4096
+	BlockSizeSSDLegacy  = 4096 // Legacy block size for existing disks
 	MinSSDSizeGiB       = 1
 	MaxSSDSizeGiB       = NumGiBInTiB * 10
 	SSDSizeIncrementGiB = 1
@@ -24,6 +25,13 @@ const (
 
 	VolumeContextDiskSerialNumberKey = "csi.crusoe.ai/serial-number"
 	VolumeContextDiskNameKey         = "csi.crusoe.ai/disk-name"
+)
+
+// StorageClass parameter keys.
+const (
+	// ParameterBlockSize is the StorageClass parameter key for specifying disk block size.
+	// Valid values are "512" (default) or "4096" (legacy).
+	ParameterBlockSize = "csi.crusoe.ai/block-size"
 )
 
 // Enums.
