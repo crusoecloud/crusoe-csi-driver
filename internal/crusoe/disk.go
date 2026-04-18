@@ -116,11 +116,12 @@ func GetCreateDiskRequest(request *csi.CreateVolumeRequest,
 }
 
 // parseBlockSize extracts and validates block size from StorageClass parameters.
-// Returns BlockSizeSSD (512) by default if not specified.
+// Returns 0 if not specified, which causes the field to be omitted from the API request
+// (via omitempty), letting the server decide the default.
 func parseBlockSize(parameters map[string]string) (int64, error) {
 	blockSizeStr, ok := parameters[common.ParameterBlockSize]
 	if !ok || blockSizeStr == "" {
-		return common.BlockSizeSSD, nil
+		return 0, nil
 	}
 
 	blockSize, err := strconv.ParseInt(blockSizeStr, 10, 64)
@@ -128,7 +129,7 @@ func parseBlockSize(parameters map[string]string) (int64, error) {
 		return 0, fmt.Errorf("%w: %s", ErrInvalidBlockSize, blockSizeStr)
 	}
 
-	if blockSize != common.BlockSizeSSD && blockSize != common.BlockSizeSSDLegacy {
+	if blockSize != common.BlockSize512 && blockSize != common.BlockSize4096 {
 		return 0, fmt.Errorf("%w: got %d", ErrInvalidBlockSize, blockSize)
 	}
 
@@ -145,13 +146,13 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 		return ErrDiskDifferentName
 	}
 
-	// Accept both new (512) and legacy (4096) block sizes for backward compatibility
-	// New disks are created with 512, but existing disks may have 4096
-	if disk.Type_ == string(common.DiskTypeSSD) &&
-		disk.BlockSize != common.BlockSizeSSD &&
-		disk.BlockSize != common.BlockSizeSSDLegacy {
-
-		return ErrDiskDifferentBlockSize
+	// Only validate block size if the user explicitly requested one via StorageClass.
+	// Otherwise trust whatever the server created the disk with.
+	if disk.Type_ == string(common.DiskTypeSSD) {
+		requestedBlockSize, _ := parseBlockSize(request.GetParameters())
+		if requestedBlockSize != 0 && disk.BlockSize != requestedBlockSize {
+			return ErrDiskDifferentBlockSize
+		}
 	}
 
 	diskSizeGiB, err := NormalizeDiskSizeToGiB(disk)

@@ -161,7 +161,7 @@ func validateDiskRequest(request *csi.CreateVolumeRequest, diskType common.DiskT
 				"%s: requested size %d must be a multiple of %d (1GiB)",
 				errInvalidDiskSize,
 				requestedSizeBytes,
-				common.BlockSizeSSD*common.NumBytesInGiB)
+				common.SSDSizeIncrementGiB*common.NumBytesInGiB)
 		}
 	case common.DiskTypeFS:
 		if requestedSizeBytes%(common.FSSizeIncrementGiB*common.NumBytesInGiB) != 0 {
