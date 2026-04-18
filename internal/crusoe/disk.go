@@ -148,11 +148,10 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 
 	// Only validate block size if the user explicitly requested one via StorageClass.
 	// Otherwise trust whatever the server created the disk with.
-	if disk.Type_ == string(common.DiskTypeSSD) {
-		requestedBlockSize, _ := parseBlockSize(request.GetParameters())
-		if requestedBlockSize != 0 && disk.BlockSize != requestedBlockSize {
-			return ErrDiskDifferentBlockSize
-		}
+	//nolint:errcheck // Invalid block size will be caught by GetCreateDiskRequest during provisioning.
+	requestedBlockSize, _ := parseBlockSize(request.GetParameters())
+	if disk.Type_ == string(common.DiskTypeSSD) && requestedBlockSize != 0 && disk.BlockSize != requestedBlockSize {
+		return ErrDiskDifferentBlockSize
 	}
 
 	diskSizeGiB, err := NormalizeDiskSizeToGiB(disk)

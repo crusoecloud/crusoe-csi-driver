@@ -6,16 +6,16 @@ import (
 
 // Numeric constants.
 const (
-	NumBytesInGiB       = 1024 * 1024 * 1024
-	NumGiBInTiB         = 1024
-	BlockSize512  int64 = 512
-	BlockSize4096 int64 = 4096
-	MinSSDSizeGiB       = 1
-	MaxSSDSizeGiB       = NumGiBInTiB * 10
-	SSDSizeIncrementGiB = 1
-	MinFSSizeGiB        = NumGiBInTiB
-	MaxFSSizeGiB        = NumGiBInTiB * 1000
-	FSSizeIncrementGiB  = NumGiBInTiB
+	NumBytesInGiB             = 1024 * 1024 * 1024
+	NumGiBInTiB               = 1024
+	BlockSize512        int64 = 512
+	BlockSize4096       int64 = 4096
+	MinSSDSizeGiB             = 1
+	MaxSSDSizeGiB             = NumGiBInTiB * 10
+	SSDSizeIncrementGiB       = 1
+	MinFSSizeGiB              = NumGiBInTiB
+	MaxFSSizeGiB              = NumGiBInTiB * 1000
+	FSSizeIncrementGiB        = NumGiBInTiB
 )
 
 // Map keys.
