@@ -8,8 +8,6 @@ import (
 const (
 	NumBytesInGiB       = 1024 * 1024 * 1024
 	NumGiBInTiB         = 1024
-	BlockSize512        = 512
-	BlockSize4096       = 4096
 	MinSSDSizeGiB       = 1
 	MaxSSDSizeGiB       = NumGiBInTiB * 10
 	SSDSizeIncrementGiB = 1
@@ -25,13 +23,6 @@ const (
 
 	VolumeContextDiskSerialNumberKey = "csi.crusoe.ai/serial-number"
 	VolumeContextDiskNameKey         = "csi.crusoe.ai/disk-name"
-)
-
-// StorageClass parameter keys.
-const (
-	// ParameterBlockSize is the StorageClass parameter key for overriding disk block size.
-	// If not set, the server decides the default. Valid values: "512", "4096".
-	ParameterBlockSize = "csi.crusoe.ai/block-size"
 )
 
 // Enums.

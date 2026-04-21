@@ -17,12 +17,11 @@ import (
 var (
 	ErrUnknownDiskSizeSuffix = errors.New("unknown disk size suffix")
 
-	ErrDiskNotFound           = errors.New("disk not found")
-	ErrDiskDifferentSize      = errors.New("disk has different size")
-	ErrDiskDifferentName      = errors.New("disk has different name")
-	ErrDiskDifferentLocation  = errors.New("disk has different location")
-	ErrDiskDifferentBlockSize = errors.New("disk has different block size")
-	ErrDiskDifferentType      = errors.New("disk has different type")
+	ErrDiskNotFound          = errors.New("disk not found")
+	ErrDiskDifferentSize     = errors.New("disk has different size")
+	ErrDiskDifferentName     = errors.New("disk has different name")
+	ErrDiskDifferentLocation = errors.New("disk has different location")
+	ErrDiskDifferentType     = errors.New("disk has different type")
 
 	ErrInstanceNotFound  = errors.New("instance not found")
 	ErrMultipleInstances = errors.New("multiple instances found")
@@ -86,8 +85,6 @@ func FindDiskByIDFallible(ctx context.Context,
 	return &disks.Items[0], nil
 }
 
-var ErrInvalidBlockSize = errors.New("invalid block size: must be 512 or 4096")
-
 func GetCreateDiskRequest(request *csi.CreateVolumeRequest,
 	location string,
 	diskType common.DiskType,
@@ -97,43 +94,12 @@ func GetCreateDiskRequest(request *csi.CreateVolumeRequest,
 		return nil, fmt.Errorf("failed to parse request size: %w", err)
 	}
 
-	var blockSize int64
-
-	if diskType == common.DiskTypeSSD {
-		blockSize, err = parseBlockSize(request.GetParameters())
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return &crusoeapi.DisksPostRequestV1Alpha5{
-		BlockSize: blockSize,
-		Location:  location,
-		Name:      request.GetName(),
-		Size:      fmt.Sprintf("%dGiB", requestSizeGiB),
-		Type_:     string(diskType),
+		Location: location,
+		Name:     request.GetName(),
+		Size:     fmt.Sprintf("%dGiB", requestSizeGiB),
+		Type_:    string(diskType),
 	}, nil
-}
-
-// parseBlockSize extracts and validates block size from StorageClass parameters.
-// Returns 0 if not specified, which causes the field to be omitted from the API request
-// (via omitempty), letting the server decide the default.
-func parseBlockSize(parameters map[string]string) (int64, error) {
-	blockSizeStr, ok := parameters[common.ParameterBlockSize]
-	if !ok || blockSizeStr == "" {
-		return 0, nil
-	}
-
-	blockSize, err := strconv.ParseInt(blockSizeStr, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%w: %s", ErrInvalidBlockSize, blockSizeStr)
-	}
-
-	if blockSize != common.BlockSize512 && blockSize != common.BlockSize4096 {
-		return 0, fmt.Errorf("%w: got %d", ErrInvalidBlockSize, blockSize)
-	}
-
-	return blockSize, nil
 }
 
 func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
@@ -144,14 +110,6 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 	if disk.Name != request.GetName() {
 		// This should never happen because we fetch the disk by name
 		return ErrDiskDifferentName
-	}
-
-	// Only validate block size if the user explicitly requested one via StorageClass.
-	// Otherwise trust whatever the server created the disk with.
-	//nolint:errcheck // Invalid block size will be caught by GetCreateDiskRequest during provisioning.
-	requestedBlockSize, _ := parseBlockSize(request.GetParameters())
-	if disk.Type_ == string(common.DiskTypeSSD) && requestedBlockSize != 0 && disk.BlockSize != requestedBlockSize {
-		return ErrDiskDifferentBlockSize
 	}
 
 	diskSizeGiB, err := NormalizeDiskSizeToGiB(disk)
