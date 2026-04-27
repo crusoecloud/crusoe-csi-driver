@@ -97,7 +97,9 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 // the storage API (dns_name / vips, CRUSOE-60428), falling back to legacy
 // configuration (the ICAT secondary-cluster DNS escape hatch and finally the
 // CLI-flag defaults) when the API does not yet populate those fields.
-func (d *Node) resolveNFSTarget(ctx context.Context, volumeID string, nfsEnabled bool) (string, string) {
+func (d *Node) resolveNFSTarget(
+	ctx context.Context, volumeID string, nfsEnabled bool,
+) (nfsHost, nfsRemotePorts string) {
 	if nfsEnabled && volumeID != "" {
 		disk, err := crusoe.FindDiskByIDFallible(ctx, d.CrusoeClient, d.HostInstance.ProjectId, volumeID)
 		if err != nil {
@@ -114,8 +116,8 @@ func (d *Node) resolveNFSTarget(ctx context.Context, volumeID string, nfsEnabled
 		}
 	}
 
-	nfsHost := d.NFSHost
-	nfsRemotePorts := d.NFSRemotePorts
+	nfsHost = d.NFSHost
+	nfsRemotePorts = d.NFSRemotePorts
 	klog.Infof("Host instance location: %q, checking against icatLocation: %q", d.HostInstance.Location, icatLocation)
 	if d.useDNSForMount(ctx) {
 		klog.Warningf("falling back to ICAT DNS-based NFS host: %s", crusoeCloudDNSNFSHost)

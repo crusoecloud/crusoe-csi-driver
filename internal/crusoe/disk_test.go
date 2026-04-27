@@ -12,9 +12,9 @@ func TestResolveNFSTarget(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		disk            crusoeapi.DiskV1Alpha5
 		wantHost        string
 		wantRemotePorts string
+		disk            crusoeapi.DiskV1Alpha5
 		wantOK          bool
 	}{
 		{
