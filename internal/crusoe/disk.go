@@ -12,7 +12,12 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
+	"k8s.io/klog/v2"
 )
+
+// ExpectedVIPRangeLen is the expected length of DiskV1Alpha5.Vips: a
+// 2-element [startIP, endIP] range as defined by the storage API contract.
+const ExpectedVIPRangeLen = 2
 
 var (
 	ErrUnknownDiskSizeSuffix = errors.New("unknown disk size suffix")
@@ -148,6 +153,36 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 	}
 
 	return nil
+}
+
+// ResolveNFSTarget returns the NFS host and remoteports value to use when
+// mounting the disk based on the data path connectivity fields populated by
+// the storage API (added in CRUSOE-60428). It returns ok=false when the disk
+// carries neither dns_name nor vips, signalling that the caller should fall
+// back to a static configuration.
+//
+// vips is contracted to be a 2-element [startIP, endIP] range; we tolerate
+// other lengths defensively but warn so the discrepancy is visible.
+func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
+	if disk.DnsName != "" {
+		return disk.DnsName, "dns", true
+	}
+	switch len(disk.Vips) {
+	case 0:
+		return "", "", false
+	case ExpectedVIPRangeLen:
+		return disk.Vips[0], fmt.Sprintf("%s-%s", disk.Vips[0], disk.Vips[1]), true
+	case 1:
+		klog.Warningf("disk %s returned %d vip(s), expected %d ([startIP, endIP]); using single vip %q",
+			disk.Id, len(disk.Vips), ExpectedVIPRangeLen, disk.Vips[0])
+
+		return disk.Vips[0], disk.Vips[0], true
+	default:
+		klog.Warningf("disk %s returned %d vips, expected %d ([startIP, endIP]); using first and last %q-%q",
+			disk.Id, len(disk.Vips), ExpectedVIPRangeLen, disk.Vips[0], disk.Vips[len(disk.Vips)-1])
+
+		return disk.Vips[0], fmt.Sprintf("%s-%s", disk.Vips[0], disk.Vips[len(disk.Vips)-1]), true
+	}
 }
 
 func GetVolumeFromDisk(disk *crusoeapi.DiskV1Alpha5,

@@ -78,17 +78,7 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 		mountOpts = append(mountOpts, node.ReadOnlyMountOption)
 	}
 
-	// Use DNS for ICAT locations instead of IP-based NFSHost
-	nfsHost := d.NFSHost
-	nfsRemotePorts := d.NFSRemotePorts
-	klog.Infof("Host instance location: %q, checking against icatLocation: %q", d.HostInstance.Location, icatLocation)
-	if d.useDNSForMount(ctx) {
-		klog.Infof("Using DNS-based NFS host for ICAT location: %s", crusoeCloudDNSNFSHost)
-		nfsHost = crusoeCloudDNSNFSHost
-		nfsRemotePorts = dnsRemotePorts
-	} else {
-		klog.Infof("Using IP-based NFS host: %s with remote ports: %s", nfsHost, nfsRemotePorts)
-	}
+	nfsHost, nfsRemotePorts := d.resolveNFSTarget(ctx, request.GetVolumeId(), nfsEnabled)
 
 	err = nodePublishVolume(d.Mounter, d.Resizer, mountOpts, nfsEnabled, nfsRemotePorts, nfsHost, request)
 	if err != nil {
@@ -100,6 +90,43 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 	klog.Infof("Successfully published volume: %s", request.GetVolumeId())
 
 	return &csi.NodePublishVolumeResponse{}, nil
+}
+
+// resolveNFSTarget determines the NFS host and remoteports value to use when
+// publishing a volume. It prefers per-disk data path connectivity returned by
+// the storage API (dns_name / vips, CRUSOE-60428), falling back to legacy
+// configuration (the ICAT secondary-cluster DNS escape hatch and finally the
+// CLI-flag defaults) when the API does not yet populate those fields.
+func (d *Node) resolveNFSTarget(ctx context.Context, volumeID string, nfsEnabled bool) (string, string) {
+	if nfsEnabled && volumeID != "" {
+		disk, err := crusoe.FindDiskByIDFallible(ctx, d.CrusoeClient, d.HostInstance.ProjectId, volumeID)
+		if err != nil {
+			klog.Warningf("failed to fetch disk %s for NFS target resolution, falling back to defaults: %s",
+				volumeID, err.Error())
+		} else if host, remotePorts, ok := crusoe.ResolveNFSTarget(disk); ok {
+			klog.Infof("Resolved NFS target from disk API for %s: host=%s remoteports=%s",
+				volumeID, host, remotePorts)
+
+			return host, remotePorts
+		} else {
+			klog.Warningf("disk %s did not return data path connectivity fields; falling back to defaults",
+				volumeID)
+		}
+	}
+
+	nfsHost := d.NFSHost
+	nfsRemotePorts := d.NFSRemotePorts
+	klog.Infof("Host instance location: %q, checking against icatLocation: %q", d.HostInstance.Location, icatLocation)
+	if d.useDNSForMount(ctx) {
+		klog.Warningf("falling back to ICAT DNS-based NFS host: %s", crusoeCloudDNSNFSHost)
+		nfsHost = crusoeCloudDNSNFSHost
+		nfsRemotePorts = dnsRemotePorts
+	} else {
+		klog.Warningf("falling back to configured IP-based NFS host: %s with remote ports: %s",
+			nfsHost, nfsRemotePorts)
+	}
+
+	return nfsHost, nfsRemotePorts
 }
 
 func (d *Node) useDNSForMount(ctx context.Context) bool {
