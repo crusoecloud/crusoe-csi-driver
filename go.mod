@@ -5,7 +5,7 @@ go 1.24.13
 require (
 	github.com/antihax/optional v1.0.0
 	github.com/container-storage-interface/spec v1.11.0
-	github.com/crusoecloud/client-go v0.1.110
+	github.com/crusoecloud/client-go v0.1.141
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.20.1
