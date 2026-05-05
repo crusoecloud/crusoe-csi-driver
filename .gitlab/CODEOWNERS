@@ -1,9 +1,19 @@
-.gitlab/CODEOWNERS @crusoeenergy/squads/managed-orchestration
+.gitlab/CODEOWNERS @crusoeenergy/squads/managed-orchestration @npujari4
 
 # more restrictive ownership for adding dependencies and changing ci/build
-.gitlab-ci.yml     @crusoeenergy/squads/managed-orchestration
-.golangci-lint.yml @crusoeenergy/squads/managed-orchestration
-go.mod             @crusoeenergy/squads/managed-orchestration
-Makefile           @crusoeenergy/squads/managed-orchestration
-Dockerfile         @crusoeenergy/squads/managed-orchestration
-Dockerfile.*       @crusoeenergy/squads/managed-orchestration
+.gitlab-ci.yml     @crusoeenergy/squads/managed-orchestration @npujari4
+.golangci-lint.yml @crusoeenergy/squads/managed-orchestration @npujari4
+go.mod             @crusoeenergy/squads/managed-orchestration @npujari4
+Makefile           @crusoeenergy/squads/managed-orchestration @npujari4
+Dockerfile         @crusoeenergy/squads/managed-orchestration @npujari4
+Dockerfile.*       @crusoeenergy/squads/managed-orchestration @npujari4
+
+# Disk request shape sent to region-coordinator — INC-438 follow-up (CRUSOE-62989).
+# Block_size, size limits, and other request-shape constants here are coupled
+# to region-coordinator validation. INC-438 was a divergence between this
+# client-side shape and the server-side validation; storage now owns this
+# coupling and reviews changes to keep the two sides aligned.
+/internal/crusoe/disk.go           @npujari4
+/internal/common/constants.go      @npujari4
+/internal/controller/controller.go @npujari4
+/internal/controller/util.go       @npujari4
