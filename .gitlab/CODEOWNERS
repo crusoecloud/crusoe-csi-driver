@@ -13,7 +13,7 @@ Dockerfile.*       @crusoeenergy/squads/managed-orchestration @crusoeenergy/squa
 # to region-coordinator validation. INC-438 was a divergence between this
 # client-side shape and the server-side validation; storage now owns this
 # coupling and reviews changes to keep the two sides aligned.
-/internal/crusoe/disk.go           @crusoeenergy/squads/storage
-/internal/common/constants.go      @crusoeenergy/squads/storage
-/internal/controller/controller.go @crusoeenergy/squads/storage
-/internal/controller/util.go       @crusoeenergy/squads/storage
+/internal/crusoe/disk.go           @crusoeenergy/squads/storage @crusoeenergy/squads/managed-orchestration
+/internal/common/constants.go      @crusoeenergy/squads/storage @crusoeenergy/squads/managed-orchestration
+/internal/controller/controller.go @crusoeenergy/squads/storage @crusoeenergy/squads/managed-orchestration
+/internal/controller/util.go       @crusoeenergy/squads/storage @crusoeenergy/squads/managed-orchestration
