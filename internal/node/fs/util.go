@@ -2,6 +2,7 @@ package fs
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -15,6 +16,12 @@ const (
 	nfsFilesystem    = "nfs"
 	virtioFilesystem = "virtiofs"
 )
+
+// cpuInstanceFamilies enumerates the CPU instance-type families that support
+// shared filesystems regardless of slice size. Add new CPU shapes here when
+// the platform launches them. See the README for the full instance-shape
+// support matrix.
+var cpuInstanceFamilies = []string{"c1a", "s1a", "c2a", "s2a"}
 
 func getNFSMountOpts(nfsRemotePorts string) []string {
 	opts := []string{
@@ -40,23 +47,24 @@ func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {
 		return false
 	}
 
-	// All CPU instances support shared filesystems
-	if typeSegments[0] == "c1a" || typeSegments[0] == "s1a" ||
-		typeSegments[0] == "c2a" || typeSegments[0] == "s2a" {
+	family := typeSegments[0]
+
+	// All supported CPU families support shared filesystems regardless of size.
+	if slices.Contains(cpuInstanceFamilies, family) {
 		return true
 	}
 
-	// There are 10 slices in an L40s instance
-	if typeSegments[0] == "l40s-48gb" && typeSegments[1] == "10x" {
+	// L40s instances have 10 slices total; only the full instance is supported.
+	if family == "l40s-48gb" && typeSegments[1] == "10x" {
 		return true
 	}
 
-	// There are 4 slices in a GB200 instance
-	if strings.HasPrefix(typeSegments[0], "gb200-186gb") && typeSegments[1] == "4x" {
+	// GB200 instances have 4 slices total; only the full instance is supported.
+	if strings.HasPrefix(family, "gb200-186gb") && typeSegments[1] == "4x" {
 		return true
 	}
 
-	// Otherwise, there are 8 slices in every other GPU instance
+	// All other GPU families have 8 slices; only the full instance is supported.
 	if typeSegments[1] == "8x" {
 		return true
 	}
