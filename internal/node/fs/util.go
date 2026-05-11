@@ -41,8 +41,14 @@ func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {
 	}
 
 	// All CPU instances support shared filesystems
-	if typeSegments[0] == "c1a" || typeSegments[0] == "s1a" ||
-		typeSegments[0] == "c2a" || typeSegments[0] == "s2a" {
+	// Using map for O(1) lookup instead of slice with O(n) slices.Contains()
+	supportedTypes := map[string]bool{
+		"c1a": true,
+		"s1a": true,
+		"c2a": true,
+		"s2a": true,
+	}
+	if supportedTypes[typeSegments[0]] {
 		return true
 	}
 
