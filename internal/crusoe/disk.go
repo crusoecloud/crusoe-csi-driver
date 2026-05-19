@@ -158,30 +158,50 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 // ResolveNFSTarget returns the NFS host and remoteports value to use when
 // mounting the disk based on the data path connectivity fields populated by
 // the storage API (added in CRUSOE-60428). It returns ok=false when the disk
-// carries neither dns_name nor vips, signalling that the caller should fall
+// carries neither vips nor dns_name, signalling that the caller should fall
 // back to a static configuration.
 //
-// vips is contracted to be a 2-element [startIP, endIP] range; we tolerate
+// Vips is preferred over DnsName (CRUSOE-70481): the VIP list is the
+// authoritative VIP set from the storage API and bypasses OVN's DNS intercept,
+// which has produced ENOKEY, EPROTONOSUPPORT and the musl REFUSED failure
+// modes from INC-450 in production. When vips is populated we return the
+// full set joined by "," so the kernel's NFS client receives an explicit IP
+// list in remoteports= and never invokes the dns_resolver keyring upcall.
+// Only when vips is empty do we fall back to dns_name (which the caller will
+// resolve in-process before passing to mount).
+//
+// Vips is contracted to be a 2-element [startIP, endIP] range; we tolerate
 // other lengths defensively but warn so the discrepancy is visible.
 func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
+	if len(disk.Vips) > 0 {
+		return resolveFromVIPs(disk)
+	}
 	if disk.DnsName != "" {
 		return disk.DnsName, "dns", true
 	}
+
+	return "", "", false
+}
+
+// resolveFromVIPs builds an explicit IP-list remoteports string from a disk's
+// vips field. The first IP doubles as the mount-source host so busybox-mount
+// in the Alpine CSI pod never has to do its own getaddrinfo either.
+func resolveFromVIPs(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
 	switch len(disk.Vips) {
 	case 0:
 		return "", "", false
 	case ExpectedVIPRangeLen:
-		return disk.Vips[0], fmt.Sprintf("%s-%s", disk.Vips[0], disk.Vips[1]), true
+		return disk.Vips[0], strings.Join(disk.Vips, ","), true
 	case 1:
 		klog.Warningf("disk %s returned %d vip(s), expected %d ([startIP, endIP]); using single vip %q",
 			disk.Id, len(disk.Vips), ExpectedVIPRangeLen, disk.Vips[0])
 
 		return disk.Vips[0], disk.Vips[0], true
 	default:
-		klog.Warningf("disk %s returned %d vips, expected %d ([startIP, endIP]); using first and last %q-%q",
-			disk.Id, len(disk.Vips), ExpectedVIPRangeLen, disk.Vips[0], disk.Vips[len(disk.Vips)-1])
+		klog.Warningf("disk %s returned %d vips, expected %d ([startIP, endIP]); joining all into remoteports",
+			disk.Id, len(disk.Vips), ExpectedVIPRangeLen)
 
-		return disk.Vips[0], fmt.Sprintf("%s-%s", disk.Vips[0], disk.Vips[len(disk.Vips)-1]), true
+		return disk.Vips[0], strings.Join(disk.Vips, ","), true
 	}
 }
 

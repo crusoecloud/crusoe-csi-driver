@@ -32,20 +32,20 @@ func TestResolveNFSTarget(t *testing.T) {
 			wantOK:          true,
 		},
 		{
-			name: "dns name preferred over vips",
+			name: "vips preferred over dns name",
 			disk: crusoeapi.DiskV1Alpha5{
 				DnsName: "nfs.crusoecloudcompute.com",
 				Vips:    []string{"1.2.3.4", "1.2.3.8"},
 			},
-			wantHost:        "nfs.crusoecloudcompute.com",
-			wantRemotePorts: "dns",
+			wantHost:        "1.2.3.4",
+			wantRemotePorts: "1.2.3.4,1.2.3.8",
 			wantOK:          true,
 		},
 		{
-			name:            "vip range produces hyphenated remoteports",
+			name:            "vip range produces comma-joined remoteports",
 			disk:            crusoeapi.DiskV1Alpha5{Vips: []string{"1.2.3.4", "1.2.3.8"}},
 			wantHost:        "1.2.3.4",
-			wantRemotePorts: "1.2.3.4-1.2.3.8",
+			wantRemotePorts: "1.2.3.4,1.2.3.8",
 			wantOK:          true,
 		},
 		{
@@ -56,10 +56,10 @@ func TestResolveNFSTarget(t *testing.T) {
 			wantOK:          true,
 		},
 		{
-			name:            "more than two vips uses first and last",
+			name:            "more than two vips joins the entire list",
 			disk:            crusoeapi.DiskV1Alpha5{Vips: []string{"1.2.3.4", "1.2.3.5", "1.2.3.8"}},
 			wantHost:        "1.2.3.4",
-			wantRemotePorts: "1.2.3.4-1.2.3.8",
+			wantRemotePorts: "1.2.3.4,1.2.3.5,1.2.3.8",
 			wantOK:          true,
 		},
 	}
