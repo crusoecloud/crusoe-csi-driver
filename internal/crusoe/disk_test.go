@@ -38,14 +38,14 @@ func TestResolveNFSTarget(t *testing.T) {
 				Vips:    []string{"1.2.3.4", "1.2.3.8"},
 			},
 			wantHost:        "1.2.3.4",
-			wantRemotePorts: "1.2.3.4,1.2.3.8",
+			wantRemotePorts: "1.2.3.4-1.2.3.8",
 			wantOK:          true,
 		},
 		{
-			name:            "vip range produces comma-joined remoteports",
+			name:            "vip range produces kernel-range remoteports",
 			disk:            crusoeapi.DiskV1Alpha5{Vips: []string{"1.2.3.4", "1.2.3.8"}},
 			wantHost:        "1.2.3.4",
-			wantRemotePorts: "1.2.3.4,1.2.3.8",
+			wantRemotePorts: "1.2.3.4-1.2.3.8",
 			wantOK:          true,
 		},
 		{
@@ -56,10 +56,10 @@ func TestResolveNFSTarget(t *testing.T) {
 			wantOK:          true,
 		},
 		{
-			name:            "more than two vips joins the entire list",
+			name:            "more than two vips uses first and last as range endpoints",
 			disk:            crusoeapi.DiskV1Alpha5{Vips: []string{"1.2.3.4", "1.2.3.5", "1.2.3.8"}},
 			wantHost:        "1.2.3.4",
-			wantRemotePorts: "1.2.3.4,1.2.3.5,1.2.3.8",
+			wantRemotePorts: "1.2.3.4-1.2.3.8",
 			wantOK:          true,
 		},
 	}

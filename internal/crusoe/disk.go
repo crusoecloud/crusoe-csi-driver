@@ -165,13 +165,16 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 // authoritative VIP set from the storage API and bypasses OVN's DNS intercept,
 // which has produced ENOKEY, EPROTONOSUPPORT and the musl REFUSED failure
 // modes from INC-450 in production. When vips is populated we return the
-// full set joined by "," so the kernel's NFS client receives an explicit IP
-// list in remoteports= and never invokes the dns_resolver keyring upcall.
-// Only when vips is empty do we fall back to dns_name (which the caller will
-// resolve in-process before passing to mount).
+// kernel-range form "<startIP>-<endIP>" so remoteports= expands to every IP
+// in the range without invoking the dns_resolver keyring upcall. Only when
+// vips is empty do we fall back to dns_name (which the caller will resolve
+// in-process before passing to mount).
 //
-// Vips is contracted to be a 2-element [startIP, endIP] range; we tolerate
-// other lengths defensively but warn so the discrepancy is visible.
+// Vips is contracted to be a 2-element [startIP, endIP] range. We tolerate
+// other lengths defensively but warn so the discrepancy is visible. We do
+// NOT comma-join the range endpoints — comma-joining would yield only the
+// two endpoint IPs and drop every IP in between, defeating the load-balancing
+// the range is meant to provide.
 func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
 	if len(disk.Vips) > 0 {
 		return resolveFromVIPs(disk)
@@ -183,25 +186,27 @@ func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, o
 	return "", "", false
 }
 
-// resolveFromVIPs builds an explicit IP-list remoteports string from a disk's
-// vips field. The first IP doubles as the mount-source host so busybox-mount
-// in the Alpine CSI pod never has to do its own getaddrinfo either.
+// resolveFromVIPs builds the kernel-range remoteports string ("startIP-endIP")
+// from a disk's vips field. The first IP doubles as the mount-source host so
+// busybox-mount in the Alpine CSI pod never has to do its own getaddrinfo
+// either. The hyphenated range form is parsed by the Linux NFS client and
+// expanded to every IP between start and end inclusive.
 func resolveFromVIPs(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
 	switch len(disk.Vips) {
 	case 0:
 		return "", "", false
 	case ExpectedVIPRangeLen:
-		return disk.Vips[0], strings.Join(disk.Vips, ","), true
+		return disk.Vips[0], fmt.Sprintf("%s-%s", disk.Vips[0], disk.Vips[1]), true
 	case 1:
 		klog.Warningf("disk %s returned %d vip(s), expected %d ([startIP, endIP]); using single vip %q",
 			disk.Id, len(disk.Vips), ExpectedVIPRangeLen, disk.Vips[0])
 
 		return disk.Vips[0], disk.Vips[0], true
 	default:
-		klog.Warningf("disk %s returned %d vips, expected %d ([startIP, endIP]); joining all into remoteports",
-			disk.Id, len(disk.Vips), ExpectedVIPRangeLen)
+		klog.Warningf("disk %s returned %d vips, expected %d ([startIP, endIP]); using first and last %q-%q",
+			disk.Id, len(disk.Vips), ExpectedVIPRangeLen, disk.Vips[0], disk.Vips[len(disk.Vips)-1])
 
-		return disk.Vips[0], strings.Join(disk.Vips, ","), true
+		return disk.Vips[0], fmt.Sprintf("%s-%s", disk.Vips[0], disk.Vips[len(disk.Vips)-1]), true
 	}
 }
 
