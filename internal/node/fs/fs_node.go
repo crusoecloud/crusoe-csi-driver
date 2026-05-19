@@ -94,9 +94,18 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 
 // resolveNFSTarget determines the NFS host and remoteports value to use when
 // publishing a volume. It prefers per-disk data path connectivity returned by
-// the storage API (dns_name / vips, CRUSOE-60428), falling back to legacy
+// the storage API (vips / dns_name, CRUSOE-60428), falling back to legacy
 // configuration (the ICAT secondary-cluster DNS escape hatch and finally the
 // CLI-flag defaults) when the API does not yet populate those fields.
+//
+// Whichever branch produces the (host, remoteports) pair, the result is run
+// through materializeNFSTarget so that the kernel never receives the literal
+// "dns" remoteports value (CRUSOE-70481): doing DNS resolution in-process
+// avoids the kernel dns_resolver keyring upcall (which has produced ENOKEY,
+// EPROTONOSUPPORT and the musl REFUSED bug from INC-450 in production). On
+// resolution failure we log a warning and fall through with the original
+// inputs so behaviour degrades to the prior code path rather than failing
+// the mount outright.
 func (d *Node) resolveNFSTarget(
 	ctx context.Context, volumeID string, nfsEnabled bool,
 ) (nfsHost, nfsRemotePorts string) {
@@ -109,7 +118,7 @@ func (d *Node) resolveNFSTarget(
 			klog.Infof("Resolved NFS target from disk API for %s: host=%s remoteports=%s",
 				volumeID, host, remotePorts)
 
-			return host, remotePorts
+			return materializeOrPassthrough(host, remotePorts)
 		} else {
 			klog.Warningf("disk %s did not return data path connectivity fields; falling back to defaults",
 				volumeID)
@@ -128,7 +137,26 @@ func (d *Node) resolveNFSTarget(
 			nfsHost, nfsRemotePorts)
 	}
 
-	return nfsHost, nfsRemotePorts
+	return materializeOrPassthrough(nfsHost, nfsRemotePorts)
+}
+
+// materializeOrPassthrough resolves a "dns" remoteports target to an explicit
+// IPv4 list. On any resolver error it logs a warning and returns the original
+// inputs so the mount still attempts the legacy DNS-via-keyring path.
+func materializeOrPassthrough(host, remotePorts string) (resolvedHost, resolvedRemotePorts string) {
+	newHost, newRemotePorts, err := materializeNFSTarget(host, remotePorts)
+	if err != nil {
+		klog.Warningf("failed to materialize NFS target host=%s remoteports=%s, passing through: %s",
+			host, remotePorts, err.Error())
+
+		return host, remotePorts
+	}
+	if newHost != host || newRemotePorts != remotePorts {
+		klog.Infof("Materialized NFS target: host=%s remoteports=%s (was host=%s remoteports=%s)",
+			newHost, newRemotePorts, host, remotePorts)
+	}
+
+	return newHost, newRemotePorts
 }
 
 func (d *Node) useDNSForMount(ctx context.Context) bool {
