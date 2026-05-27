@@ -1,6 +1,6 @@
 module github.com/crusoecloud/crusoe-csi-driver
 
-go 1.24.13
+go 1.26
 
 require (
 	github.com/antihax/optional v1.0.0
