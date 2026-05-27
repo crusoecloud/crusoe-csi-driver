@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/node"
 	"k8s.io/klog/v2"
@@ -32,7 +32,7 @@ func getNFSMountOpts(nfsRemotePorts string) []string {
 	return opts
 }
 
-func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {
+func supportsFS(instance *crusoeapi.InstanceV1) bool {
 	typeSegments := strings.Split(instance.Type_, ".")
 	if len(typeSegments) != node.ExpectedTypeSegments {
 		klog.Infof("Unexpected instance type: %s", instance.Type_)

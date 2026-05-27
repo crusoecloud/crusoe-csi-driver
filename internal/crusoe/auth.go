@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1"
 )
 
 // AuthenticatingTransport is a struct implementing http.Roundtripper

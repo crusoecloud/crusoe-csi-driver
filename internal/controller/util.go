@@ -12,7 +12,7 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1"
 )
 
 var (
@@ -191,7 +191,7 @@ func validateDiskRequest(request *csi.CreateVolumeRequest, diskType common.DiskT
 func parseRequiredTopology(request *csi.CreateVolumeRequest,
 	diskType common.DiskType,
 	pluginName string,
-	hostInstance *crusoeapi.InstanceV1Alpha5) (
+	hostInstance *crusoeapi.InstanceV1) (
 	location string,
 	requireSupportsFS bool,
 ) {

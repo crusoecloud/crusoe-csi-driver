@@ -59,7 +59,7 @@ const (
 )
 
 const (
-	CrusoeAPIEndpointDefault = "https://api.crusoecloud.com/v1alpha5"
+	CrusoeAPIEndpointDefault = "https://api.cloud.crusoe.ai/v1"
 	SocketAddressDefault     = "unix:/tmp/csi.sock"
 	NFSRemotePortsDefault    = "100.64.0.2-100.64.0.17"
 	NFSHostDefault           = "100.64.0.2"

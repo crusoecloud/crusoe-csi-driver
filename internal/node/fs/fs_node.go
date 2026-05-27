@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/crusoe"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/node"
@@ -26,7 +26,7 @@ type Node struct {
 	csi.UnimplementedNodeServer
 	CrusoeClient      *crusoeapi.APIClient
 	CrusoeHTTPClient  *http.Client
-	HostInstance      *crusoeapi.InstanceV1Alpha5
+	HostInstance      *crusoeapi.InstanceV1
 	Mounter           *mount.SafeFormatAndMount
 	Resizer           *mount.ResizeFs
 	CrusoeAPIEndpoint string

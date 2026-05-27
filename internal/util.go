@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/antihax/optional"
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/crusoe"
 	"github.com/google/uuid"
@@ -44,7 +44,7 @@ var (
 )
 
 //nolint:cyclop // function is already fairly clean
-func getHostInstance(ctx context.Context) (*crusoeapi.InstanceV1Alpha5, error) {
+func getHostInstance(ctx context.Context) (*crusoeapi.InstanceV1, error) {
 	crusoeClient := crusoe.NewCrusoeClient(
 		viper.GetString(CrusoeAPIEndpointFlag),
 		viper.GetString(CrusoeAccessKeyFlag),

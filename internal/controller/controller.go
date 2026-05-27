@@ -16,13 +16,13 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"k8s.io/klog/v2"
 
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1"
 )
 
 type DefaultController struct {
 	csi.UnimplementedControllerServer
 	CrusoeClient  *crusoeapi.APIClient
-	HostInstance  *crusoeapi.InstanceV1Alpha5
+	HostInstance  *crusoeapi.InstanceV1
 	DiskType      common.DiskType
 	PluginName    string
 	PluginVersion string
@@ -77,7 +77,7 @@ func (d *DefaultController) CreateVolume(ctx context.Context, request *csi.Creat
 		return nil, status.Errorf(codes.InvalidArgument, "failed to get create disk request: %s", err)
 	}
 
-	var disk *crusoeapi.DiskV1Alpha5
+	var disk *crusoeapi.DiskV1
 
 	if existingDisk != nil {
 		// Check if existing existingDisk matches what we want
@@ -111,7 +111,7 @@ func (d *DefaultController) CreateVolume(ctx context.Context, request *csi.Creat
 		}
 
 		// Get the created disk
-		newDisk, _, getResultErr := common.GetAsyncOperationResult[crusoeapi.DiskV1Alpha5](ctx,
+		newDisk, _, getResultErr := common.GetAsyncOperationResult[crusoeapi.DiskV1](ctx,
 			op.Operation,
 			d.HostInstance.ProjectId,
 			d.CrusoeClient.DiskOperationsApi.GetStorageDisksOperation)
@@ -235,7 +235,7 @@ func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
 		mode = "read-only"
 	}
 
-	op, _, err := d.CrusoeClient.VMsApi.UpdateInstanceAttachDisks(ctx, crusoeapi.InstancesAttachDiskPostRequestV1Alpha5{
+	op, _, err := d.CrusoeClient.VMsApi.UpdateInstanceAttachDisks(ctx, crusoeapi.InstancesAttachDiskPostRequestV1{
 		AttachDisks: []crusoeapi.DiskAttachment{
 			{
 				AttachmentType: "data",

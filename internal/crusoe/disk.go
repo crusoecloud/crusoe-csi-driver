@@ -10,7 +10,7 @@ import (
 	"github.com/antihax/optional"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 	"k8s.io/klog/v2"
 )
@@ -33,7 +33,7 @@ var (
 	ErrMultipleInstances = errors.New("multiple instances found")
 )
 
-func NormalizeDiskSizeToGiB(disk *crusoeapi.DiskV1Alpha5) (int, error) {
+func NormalizeDiskSizeToGiB(disk *crusoeapi.DiskV1) (int, error) {
 	if strings.HasSuffix(disk.Size, "GiB") {
 		sizeGiB, err := strconv.Atoi(strings.TrimSuffix(disk.Size, "GiB"))
 		if err != nil {
@@ -57,7 +57,7 @@ func FindDiskByNameFallible(ctx context.Context,
 	crusoeClient *crusoeapi.APIClient,
 	projectID string,
 	name string,
-) (*crusoeapi.DiskV1Alpha5, error) {
+) (*crusoeapi.DiskV1, error) {
 	disks, _, listErr := crusoeClient.DisksApi.ListDisks(ctx,
 		projectID,
 		&crusoeapi.DisksApiListDisksOpts{DiskNames: optional.NewInterface([]string{name})})
@@ -76,7 +76,7 @@ func FindDiskByIDFallible(ctx context.Context,
 	crusoeClient *crusoeapi.APIClient,
 	projectID string,
 	diskID string,
-) (*crusoeapi.DiskV1Alpha5, error) {
+) (*crusoeapi.DiskV1, error) {
 	disks, _, listErr := crusoeClient.DisksApi.ListDisks(ctx,
 		projectID,
 		&crusoeapi.DisksApiListDisksOpts{DiskIds: optional.NewInterface([]string{diskID})})
@@ -94,7 +94,7 @@ func FindDiskByIDFallible(ctx context.Context,
 func GetCreateDiskRequest(request *csi.CreateVolumeRequest,
 	location string,
 	diskType common.DiskType,
-) (*crusoeapi.DisksPostRequestV1Alpha5, error) {
+) (*crusoeapi.DisksPostRequestV1, error) {
 	requestSizeGiB, err := common.RequestSizeToGiB(request.GetCapacityRange())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse request size: %w", err)
@@ -106,7 +106,7 @@ func GetCreateDiskRequest(request *csi.CreateVolumeRequest,
 		blockSize = common.BlockSizeSSD // TODO: Support different block sizes
 	}
 
-	return &crusoeapi.DisksPostRequestV1Alpha5{
+	return &crusoeapi.DisksPostRequestV1{
 		BlockSize: blockSize,
 		Location:  location,
 		Name:      request.GetName(),
@@ -115,7 +115,7 @@ func GetCreateDiskRequest(request *csi.CreateVolumeRequest,
 	}, nil
 }
 
-func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
+func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1,
 	request *csi.CreateVolumeRequest,
 	expectedLocation string,
 	expectedType common.DiskType,
@@ -163,7 +163,7 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 //
 // vips is contracted to be a 2-element [startIP, endIP] range; we tolerate
 // other lengths defensively but warn so the discrepancy is visible.
-func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
+func ResolveNFSTarget(disk *crusoeapi.DiskV1) (host, remotePorts string, ok bool) {
 	if disk.DnsName != "" {
 		return disk.DnsName, "dns", true
 	}
@@ -185,7 +185,7 @@ func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, o
 	}
 }
 
-func GetVolumeFromDisk(disk *crusoeapi.DiskV1Alpha5,
+func GetVolumeFromDisk(disk *crusoeapi.DiskV1,
 
 	pluginName,
 	location string,
@@ -225,7 +225,7 @@ func GetInstanceByID(ctx context.Context,
 	crusoeClient *crusoeapi.APIClient,
 	instanceID,
 	projectID string,
-) (*crusoeapi.InstanceV1Alpha5, error) {
+) (*crusoeapi.InstanceV1, error) {
 	listVMOpts := &crusoeapi.VMsApiListInstancesOpts{
 		Ids: optional.NewString(instanceID),
 	}

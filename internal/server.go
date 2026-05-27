@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc"
 	"k8s.io/klog/v2"
 
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1"
 )
 
 func registerIdentity(grpcServer *grpc.Server, serveController bool) {
@@ -47,7 +47,7 @@ func registerIdentity(grpcServer *grpc.Server, serveController bool) {
 	})
 }
 
-func registerController(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) {
+func registerController(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1) {
 	capabilities := common.BaseControllerCapabilities
 
 	csi.RegisterControllerServer(grpcServer, &controller.DefaultController{
@@ -60,7 +60,7 @@ func registerController(grpcServer *grpc.Server, hostInstance *crusoeapi.Instanc
 	})
 }
 
-func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) {
+func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1) {
 	// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
 	capabilities := common.BaseNodeCapabilities
 	var maxVolumesPerNode int64
@@ -108,7 +108,7 @@ func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alp
 	csi.RegisterNodeServer(grpcServer, nodeServer)
 }
 
-func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) {
+func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1) {
 	serveIdentity := false
 	serveController := false
 	serveNode := false

@@ -3,7 +3,7 @@ package crusoe_test
 import (
 	"testing"
 
-	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	crusoeapi "github.com/crusoecloud/client-go/swagger/v1"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/crusoe"
 )
 
