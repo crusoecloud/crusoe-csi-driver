@@ -61,7 +61,7 @@ func TestMaterializeNFSTarget_IPListPassthrough(t *testing.T) {
 }
 
 //nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
-func TestMaterializeNFSTarget_DNSResolvesToList(t *testing.T) {
+func TestMaterializeNFSTarget_DNSResolvesToRange(t *testing.T) {
 	const lookupHost = "nfs.crusoecloudcompute.com"
 	withStubLookupIP(t, func(host string) ([]net.IP, error) {
 		if host != lookupHost {
@@ -76,10 +76,40 @@ func TestMaterializeNFSTarget_DNSResolvesToList(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if gotHost != testIPv4A {
-		t.Errorf("host = %q, want %q (first IPv4)", gotHost, testIPv4A)
+		t.Errorf("host = %q, want %q (lowest IPv4 by network byte order)", gotHost, testIPv4A)
 	}
-	if gotPorts != testIPv4A+","+testIPv4B {
-		t.Errorf("remotePorts = %q, want %q", gotPorts, testIPv4A+","+testIPv4B)
+	// vastnfs rejects comma-separated lists with EINVAL; only the kernel-range
+	// form "<low>-<high>" is accepted. See CRUSOE-70481 dlim ICAT test
+	// 2026-05-29 for the empirical failure that motivated this assertion.
+	want := testIPv4A + "-" + testIPv4B
+	if gotPorts != want {
+		t.Errorf("remotePorts = %q, want %q (dash-range form, NOT comma-separated)", gotPorts, want)
+	}
+}
+
+//nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
+// TestMaterializeNFSTarget_SortsOutOfOrderResponse guards against the kernel
+// receiving "<high>-<low>" — the range form requires the lower IP first, and
+// net.LookupIP is documented to return addresses in unspecified order. This
+// matches the dlim ICAT response we observed (16 VIPs returned in shuffled
+// order) which would otherwise produce a malformed range like
+// "172.27.255.33-172.27.255.18".
+func TestMaterializeNFSTarget_SortsOutOfOrderResponse(t *testing.T) {
+	withStubLookupIP(t, func(_ string) ([]net.IP, error) {
+		// Deliberately reverse order: DNS hands us testIPv4B (higher) first.
+		return []net.IP{net.ParseIP(testIPv4B), net.ParseIP(testIPv4A)}, nil
+	})
+
+	gotHost, gotPorts, err := fs.MaterializeNFSTarget(testHost, testDNS)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotHost != testIPv4A {
+		t.Errorf("host = %q, want %q (must be the lowest IP after sort)", gotHost, testIPv4A)
+	}
+	want := testIPv4A + "-" + testIPv4B
+	if gotPorts != want {
+		t.Errorf("remotePorts = %q, want %q (sorted dash-range)", gotPorts, want)
 	}
 }
 
