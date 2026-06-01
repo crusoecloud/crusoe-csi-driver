@@ -17,6 +17,8 @@ func TestSupportsFS(t *testing.T) {
 		// CPU instances always support shared FS, regardless of slice count.
 		{name: "c1a", instanceType: "c1a.16x", want: true},
 		{name: "s1a", instanceType: "s1a.8x", want: true},
+		{name: "c2a", instanceType: "c2a.4x", want: true},
+		{name: "s2a", instanceType: "s2a.2x", want: true},
 
 		// L40s: supported on any slice count (CRUSOE-67560). The full-node
 		// .10x case must keep working; smaller slices must now also pass.
