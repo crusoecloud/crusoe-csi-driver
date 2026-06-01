@@ -52,8 +52,13 @@ func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {
 		return true
 	}
 
-	// There are 10 slices in a L40s instance
-	if typeSegments[0] == "l40s-48gb" && typeSegments[1] == "10x" {
+	// L40s instances support shared filesystems on any slice count. The slice-count
+	// restriction was a virtiofs-era constraint (shared disk was backed per-host, so
+	// only a full node could share it). Post-NFS-migration there is no host-locality
+	// requirement, and region-coordinator already only enforces slice counts for
+	// projects still on virtiofs (see checkSharedVolumeSliceTypeandNumSlices, gated on
+	// IsProjectUsingVirtiofsForSharedDisks). CRUSOE-67560.
+	if typeSegments[0] == "l40s-48gb" {
 		return true
 	}
 
