@@ -40,39 +40,17 @@ func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {
 		return false
 	}
 
-	// All CPU instances support shared filesystems
-	// Using map with empty struct for O(1) lookup and minimal memory footprint
-	supportedTypes := map[string]struct{}{
-		"c1a": {},
-		"s1a": {},
-		"c2a": {},
-		"s2a": {},
-	}
-	if _, ok := supportedTypes[typeSegments[0]]; ok {
-		return true
-	}
-
-	// L40s instances support shared filesystems on any slice count. The slice-count
-	// restriction was a virtiofs-era constraint (shared disk was backed per-host, so
-	// only a full node could share it). Post-NFS-migration there is no host-locality
-	// requirement, and region-coordinator already only enforces slice counts for
-	// projects still on virtiofs (see checkSharedVolumeSliceTypeandNumSlices, gated on
-	// IsProjectUsingVirtiofsForSharedDisks). CRUSOE-67560.
-	if typeSegments[0] == "l40s-48gb" {
-		return true
-	}
-
-	// There are 4 slices in a GB200 instance
-	if strings.HasPrefix(typeSegments[0], "gb200-186gb") && typeSegments[1] == "4x" {
-		return true
-	}
-
-	// Otherwise, there are 8 slices in every other GPU instance
-	if typeSegments[1] == "8x" {
-		return true
-	}
-
-	return false
+	// All instance types support shared filesystems over NFS, regardless of SKU
+	// or slice count. The per-SKU slice-count restrictions that used to live here
+	// were a virtiofs-era constraint: shared disks were backed per-host, so only a
+	// full node could share one. Post-NFS-migration there is no host-locality
+	// requirement, and region-coordinator remains the enforcement boundary — it
+	// only restricts slice counts for projects still on virtiofs (see
+	// checkSharedVolumeSliceTypeandNumSlices, gated on
+	// IsProjectUsingVirtiofsForSharedDisks). The CSI-side gate was therefore
+	// redundant and wrongly blocked sub-full-node slices on NFS projects.
+	// CRUSOE-67560.
+	return true
 }
 
 func getFSDevicePath(request *csi.NodePublishVolumeRequest, supportsNfs bool, nfsIP string) (string, error) {
