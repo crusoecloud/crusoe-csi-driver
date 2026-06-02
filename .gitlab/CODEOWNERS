@@ -17,3 +17,8 @@ Dockerfile.*       @crusoeenergy/squads/managed-orchestration @crusoeenergy/squa
 /internal/common/constants.go      @crusoeenergy/squads/storage @crusoeenergy/squads/managed-orchestration
 /internal/controller/controller.go @crusoeenergy/squads/storage @crusoeenergy/squads/managed-orchestration
 /internal/controller/util.go       @crusoeenergy/squads/storage @crusoeenergy/squads/managed-orchestration
+
+# Shared-filesystem support gating (supportsFS slice rules) and NFS mount path.
+# Coupled to region-coordinator's NFS migration + slice-type validation; storage
+# owns this so the CSI-side gate stays aligned with the server side (CRUSOE-67560).
+/internal/node/fs/                  @crusoeenergy/squads/storage @crusoeenergy/squads/managed-orchestration
