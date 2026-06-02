@@ -8,9 +8,11 @@ BUILDDIR := ${PREFIX}/dist
 BUILDTAGS :=
 
 GOLANGCI_VERSION = v1.62.0
-GO_ACC_VERSION = latest
+GO_ACC_VERSION = v0.2.8
 GOTESTSUM_VERSION = v1.12
-GOCOVER_VERSION = latest
+# Pin gocover-cobertura: v1.5.0 requires Go >= 1.25 and breaks the go-ci-1.24
+# image (test-ci fails at `go install ...@latest`). v1.4.0 needs only Go 1.22.
+GOCOVER_VERSION = v1.4.0
 
 export CRUSOE_CSI_DRIVER_VERSION?=$(shell git describe --always --tags --dirty)
 GO_LDFLAGS=-ldflags "-X github.com/crusoecloud/crusoe-csi-driver/internal/common.PluginVersion=$$CRUSOE_CSI_DRIVER_VERSION"
