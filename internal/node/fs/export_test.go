@@ -33,3 +33,9 @@ func SetLookupIP(
 // so tests can match it with errors.Is without taking a package-private
 // dependency.
 var ErrNoUsableNFSAddressForTest = ErrNoUsableNFSAddress
+
+// HostNameservers is a test-only handle for hostNameservers so resolve_test.go
+// can exercise the host resolv.conf parser against fixtures.
+//
+//nolint:gochecknoglobals // deliberate test seam
+var HostNameservers = hostNameservers

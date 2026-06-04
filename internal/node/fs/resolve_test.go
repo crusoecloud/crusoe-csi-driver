@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -278,5 +281,67 @@ func TestMaterializeNFSTarget_StripsV6Only(t *testing.T) {
 	}
 	if gotHost != testIPv4A || gotPorts != testIPv4A {
 		t.Errorf("v6 should be stripped; got host=%q ports=%q", gotHost, gotPorts)
+	}
+}
+
+// writeResolvConf writes a resolv.conf fixture and returns its path.
+func writeResolvConf(t *testing.T, body string) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "resolv.conf")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	return path
+}
+
+// TestHostNameservers_ParsesAndFilters guards the host resolv.conf parser that
+// backs the CoreDNS-bypass path (CRUSOE-70481): each `nameserver` line becomes
+// an "ip:53" dial target in file order; comments, blank lines, search/options
+// lines, and malformed IPs are ignored; the systemd stub (127.0.0.53) is kept
+// verbatim (dialed from the host netns it reaches host systemd-resolved →
+// OVN/CloudDNS).
+func TestHostNameservers_ParsesAndFilters(t *testing.T) {
+	t.Parallel()
+
+	path := writeResolvConf(t, `# managed by systemd-resolved
+; another comment
+nameserver 169.254.169.254
+search crusoecloudcompute.com svc.cluster.local
+options ndots:2
+nameserver not-an-ip
+nameserver 127.0.0.53
+`)
+
+	got, err := fs.HostNameservers(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"169.254.169.254:53", "127.0.0.53:53"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v (in-order; malformed dropped; 127.0.0.53 kept)", got, want)
+	}
+}
+
+// TestHostNameservers_MissingFile ensures a missing host resolv.conf surfaces an
+// error (so materializeNFSTarget falls back to the legacy "dns" path rather than
+// silently using the pod's CoreDNS resolver).
+func TestHostNameservers_MissingFile(t *testing.T) {
+	t.Parallel()
+
+	if _, err := fs.HostNameservers(filepath.Join(t.TempDir(), "does-not-exist")); err == nil {
+		t.Fatal("expected error for missing resolv.conf, got nil")
+	}
+}
+
+// TestHostNameservers_NoNameservers ensures a resolv.conf with no nameserver
+// entries is treated as an error rather than yielding an empty dial set.
+func TestHostNameservers_NoNameservers(t *testing.T) {
+	t.Parallel()
+
+	path := writeResolvConf(t, "search example.com\noptions ndots:2\n# no nameserver lines\n")
+	if _, err := fs.HostNameservers(path); err == nil {
+		t.Fatal("expected error when no nameserver entries present, got nil")
 	}
 }
