@@ -6,7 +6,10 @@
 // (black-box) package alongside the other tests in this directory.
 package fs
 
-import "net"
+import (
+	"context"
+	"net"
+)
 
 // MaterializeNFSTarget is a test-only exported handle for materializeNFSTarget.
 //
@@ -15,8 +18,11 @@ var MaterializeNFSTarget = materializeNFSTarget
 
 // SetLookupIP swaps the package-private DNS lookup function for the duration
 // of a test and returns the previous value so callers can restore it via
-// t.Cleanup or defer.
-func SetLookupIP(fn func(host string) ([]net.IP, error)) func(host string) ([]net.IP, error) {
+// t.Cleanup or defer. The signature mirrors net.Resolver.LookupIP so tests can
+// assert the network ("ip4") and FQDN host passed by materializeNFSTarget.
+func SetLookupIP(
+	fn func(ctx context.Context, network, host string) ([]net.IP, error),
+) func(ctx context.Context, network, host string) ([]net.IP, error) {
 	prev := lookupIP
 	lookupIP = fn
 
