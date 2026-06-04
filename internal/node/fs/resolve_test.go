@@ -1,9 +1,11 @@
 package fs_test
 
 import (
+	"context"
 	"errors"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/crusoecloud/crusoe-csi-driver/internal/node/fs"
 )
@@ -21,16 +23,21 @@ var errStubLookup = errors.New("stub lookup error")
 // test. It returns a counter for how many times the stub was invoked so
 // tests can assert no DNS lookup happens on the IP-list passthrough path.
 //
+// The stub signature mirrors net.Resolver.LookupIP(ctx, network, host) so
+// tests can assert materializeNFSTarget requests ip4-only and an FQDN host.
+//
 // These tests cannot run in parallel because they mutate package state
 // (the lookupIP function variable inside the fs package).
-func withStubLookupIP(t *testing.T, fn func(host string) ([]net.IP, error)) *int {
+func withStubLookupIP(
+	t *testing.T, fn func(ctx context.Context, network, host string) ([]net.IP, error),
+) *int {
 	t.Helper()
 
 	calls := 0
-	prev := fs.SetLookupIP(func(host string) ([]net.IP, error) {
+	prev := fs.SetLookupIP(func(ctx context.Context, network, host string) ([]net.IP, error) {
 		calls++
 
-		return fn(host)
+		return fn(ctx, network, host)
 	})
 	t.Cleanup(func() { fs.SetLookupIP(prev) })
 
@@ -39,13 +46,13 @@ func withStubLookupIP(t *testing.T, fn func(host string) ([]net.IP, error)) *int
 
 //nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
 func TestMaterializeNFSTarget_IPListPassthrough(t *testing.T) {
-	calls := withStubLookupIP(t, func(_ string) ([]net.IP, error) {
+	calls := withStubLookupIP(t, func(_ context.Context, _, _ string) ([]net.IP, error) {
 		t.Fatal("lookupIP should not be invoked when remoteports is already an IP list")
 
 		return nil, nil
 	})
 
-	gotHost, gotPorts, err := fs.MaterializeNFSTarget(testIPv4A, testIPv4A+","+testIPv4B)
+	gotHost, gotPorts, err := fs.MaterializeNFSTarget(context.Background(), testIPv4A, testIPv4A+","+testIPv4B)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,18 +67,88 @@ func TestMaterializeNFSTarget_IPListPassthrough(t *testing.T) {
 	}
 }
 
+// TestMaterializeNFSTarget_RequestsIP4AndFQDN is the core new-behavior guard
+// (CRUSOE-70481 audit blockers 2 + 3b): the resolver must request ip4-only
+// (never AAAA, immune to the OVN ::/REFUSED bug class) and a fully-qualified
+// name with a trailing dot (skips ndots:5 search-domain expansion).
+//
+//nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
+func TestMaterializeNFSTarget_RequestsIP4AndFQDN(t *testing.T) {
+	var gotNetwork, gotHost string
+	withStubLookupIP(t, func(_ context.Context, network, host string) ([]net.IP, error) {
+		gotNetwork, gotHost = network, host
+
+		return []net.IP{net.ParseIP(testIPv4A)}, nil
+	})
+
+	if _, _, err := fs.MaterializeNFSTarget(context.Background(), testHost, testDNS); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotNetwork != "ip4" {
+		t.Errorf("lookup network = %q, want %q (ip4-only: never issue AAAA)", gotNetwork, "ip4")
+	}
+	if gotHost != testHost+"." {
+		t.Errorf("lookup host = %q, want FQDN %q (trailing dot skips search domains)", gotHost, testHost+".")
+	}
+}
+
+// TestMaterializeNFSTarget_DoesNotDoubleDotFQDN ensures an already-qualified
+// name is not given a second trailing dot.
+//
+//nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
+func TestMaterializeNFSTarget_DoesNotDoubleDotFQDN(t *testing.T) {
+	var gotHost string
+	withStubLookupIP(t, func(_ context.Context, _, host string) ([]net.IP, error) {
+		gotHost = host
+
+		return []net.IP{net.ParseIP(testIPv4A)}, nil
+	})
+
+	if _, _, err := fs.MaterializeNFSTarget(context.Background(), testHost+".", testDNS); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotHost != testHost+"." {
+		t.Errorf("lookup host = %q, want single trailing dot %q", gotHost, testHost+".")
+	}
+}
+
+// TestMaterializeNFSTarget_Timeout guards CRUSOE-70481 audit blocker 1: a slow
+// or hung resolver must not hang the mount. The bounded timeout must fire and
+// the helper must return its inputs unchanged so the caller falls back to the
+// legacy "dns" path.
+//
+//nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
+func TestMaterializeNFSTarget_Timeout(t *testing.T) {
+	withStubLookupIP(t, func(ctx context.Context, _, _ string) ([]net.IP, error) {
+		<-ctx.Done() // simulate a hung nameserver
+
+		return nil, ctx.Err()
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	host, ports, err := fs.MaterializeNFSTarget(ctx, testHost, testDNS)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if host != testHost || ports != testDNS {
+		t.Errorf("on timeout, want inputs returned unchanged; got host=%q ports=%q", host, ports)
+	}
+}
+
 //nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
 func TestMaterializeNFSTarget_DNSResolvesToRange(t *testing.T) {
 	const lookupHost = "nfs.crusoecloudcompute.com"
-	withStubLookupIP(t, func(host string) ([]net.IP, error) {
-		if host != lookupHost {
+	withStubLookupIP(t, func(_ context.Context, _, host string) ([]net.IP, error) {
+		if host != lookupHost+"." {
 			t.Errorf("unexpected lookup host: %q", host)
 		}
 
 		return []net.IP{net.ParseIP(testIPv4A), net.ParseIP(testIPv4B)}, nil
 	})
 
-	gotHost, gotPorts, err := fs.MaterializeNFSTarget(lookupHost, testDNS)
+	gotHost, gotPorts, err := fs.MaterializeNFSTarget(context.Background(), lookupHost, testDNS)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -87,20 +164,21 @@ func TestMaterializeNFSTarget_DNSResolvesToRange(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
 // TestMaterializeNFSTarget_SortsOutOfOrderResponse guards against the kernel
 // receiving "<high>-<low>" — the range form requires the lower IP first, and
 // net.LookupIP is documented to return addresses in unspecified order. This
 // matches the dlim ICAT response we observed (16 VIPs returned in shuffled
 // order) which would otherwise produce a malformed range like
 // "172.27.255.33-172.27.255.18".
+//
+//nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
 func TestMaterializeNFSTarget_SortsOutOfOrderResponse(t *testing.T) {
-	withStubLookupIP(t, func(_ string) ([]net.IP, error) {
+	withStubLookupIP(t, func(_ context.Context, _, _ string) ([]net.IP, error) {
 		// Deliberately reverse order: DNS hands us testIPv4B (higher) first.
 		return []net.IP{net.ParseIP(testIPv4B), net.ParseIP(testIPv4A)}, nil
 	})
 
-	gotHost, gotPorts, err := fs.MaterializeNFSTarget(testHost, testDNS)
+	gotHost, gotPorts, err := fs.MaterializeNFSTarget(context.Background(), testHost, testDNS)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -115,11 +193,11 @@ func TestMaterializeNFSTarget_SortsOutOfOrderResponse(t *testing.T) {
 
 //nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
 func TestMaterializeNFSTarget_StripsUnspecifiedV6(t *testing.T) {
-	withStubLookupIP(t, func(_ string) ([]net.IP, error) {
+	withStubLookupIP(t, func(_ context.Context, _, _ string) ([]net.IP, error) {
 		return []net.IP{net.IPv6unspecified, net.ParseIP(testIPv4A)}, nil
 	})
 
-	gotHost, gotPorts, err := fs.MaterializeNFSTarget(testHost, testDNS)
+	gotHost, gotPorts, err := fs.MaterializeNFSTarget(context.Background(), testHost, testDNS)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -133,11 +211,11 @@ func TestMaterializeNFSTarget_StripsUnspecifiedV6(t *testing.T) {
 
 //nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
 func TestMaterializeNFSTarget_OnlyUnspecifiedYieldsError(t *testing.T) {
-	withStubLookupIP(t, func(_ string) ([]net.IP, error) {
+	withStubLookupIP(t, func(_ context.Context, _, _ string) ([]net.IP, error) {
 		return []net.IP{net.IPv6unspecified, net.IPv4zero}, nil
 	})
 
-	_, _, err := fs.MaterializeNFSTarget(testHost, testDNS)
+	_, _, err := fs.MaterializeNFSTarget(context.Background(), testHost, testDNS)
 	if err == nil {
 		t.Fatal("expected error when all addresses are unspecified, got nil")
 	}
@@ -148,13 +226,13 @@ func TestMaterializeNFSTarget_OnlyUnspecifiedYieldsError(t *testing.T) {
 
 //nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
 func TestMaterializeNFSTarget_V4MappedV6IsKept(t *testing.T) {
-	withStubLookupIP(t, func(_ string) ([]net.IP, error) {
+	withStubLookupIP(t, func(_ context.Context, _, _ string) ([]net.IP, error) {
 		// net.ParseIP("::ffff:1.2.3.4") returns the v4-mapped v6 form; its
 		// .To4() returns the unwrapped IPv4, which is what we want to keep.
 		return []net.IP{net.ParseIP("::ffff:" + testIPv4A)}, nil
 	})
 
-	gotHost, gotPorts, err := fs.MaterializeNFSTarget(testHost, testDNS)
+	gotHost, gotPorts, err := fs.MaterializeNFSTarget(context.Background(), testHost, testDNS)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -168,11 +246,11 @@ func TestMaterializeNFSTarget_V4MappedV6IsKept(t *testing.T) {
 
 //nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
 func TestMaterializeNFSTarget_LookupError(t *testing.T) {
-	withStubLookupIP(t, func(_ string) ([]net.IP, error) {
+	withStubLookupIP(t, func(_ context.Context, _, _ string) ([]net.IP, error) {
 		return nil, errStubLookup
 	})
 
-	host, ports, err := fs.MaterializeNFSTarget(testHost, testDNS)
+	host, ports, err := fs.MaterializeNFSTarget(context.Background(), testHost, testDNS)
 	if err == nil {
 		t.Fatal("expected error from lookup failure, got nil")
 	}
@@ -190,11 +268,11 @@ func TestMaterializeNFSTarget_LookupError(t *testing.T) {
 func TestMaterializeNFSTarget_StripsV6Only(t *testing.T) {
 	// Belt-and-suspenders: confirm IPv6 (non-mapped) addresses are filtered,
 	// since VAST clusters are IPv4-only at the NFS data plane in our deploy.
-	withStubLookupIP(t, func(_ string) ([]net.IP, error) {
+	withStubLookupIP(t, func(_ context.Context, _, _ string) ([]net.IP, error) {
 		return []net.IP{net.ParseIP("2001:db8::1"), net.ParseIP(testIPv4A)}, nil
 	})
 
-	gotHost, gotPorts, err := fs.MaterializeNFSTarget(testHost, testDNS)
+	gotHost, gotPorts, err := fs.MaterializeNFSTarget(context.Background(), testHost, testDNS)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
