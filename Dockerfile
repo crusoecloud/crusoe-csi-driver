@@ -30,6 +30,7 @@ RUN apk upgrade --no-cache && \
     apk add --no-cache e2fsprogs-extra~=1.47.0 && \
     apk add --no-cache blkid~=2.40.1 && \
     apk add --no-cache xfsprogs-extra~=6.8.0 && \
+    apk add --no-cache strace && \
     rm -rf /var/cache/apk/*
 
 COPY --from=builder /build/dist/crusoe-csi-driver /usr/local/go/bin/crusoe-csi-driver

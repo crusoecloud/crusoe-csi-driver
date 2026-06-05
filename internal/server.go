@@ -85,9 +85,10 @@ func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alp
 	case common.DiskTypeFS:
 		maxVolumesPerNode = common.MaxFSVolumesPerNode
 		nodeServer = &fs.Node{
-			CrusoeClient:      newCrusoeClientWithViperConfig(),
-			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
-			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
+			CrusoeClient:     newCrusoeClientWithViperConfig(),
+			CrusoeHTTPClient: newCrusoeHTTPClientWithViperConfig(),
+			// CANARY (DO NOT MERGE): strace-wrap the fs mount for e2e validation.
+			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), straceMountExec{exec.New()}),
 			Resizer:           mount.NewResizeFs(exec.New()),
 			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
 			NFSRemotePorts:    viper.GetString(NFSRemotePortsFlag),

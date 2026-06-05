@@ -182,20 +182,14 @@ func (d *Node) fetchDiskOrNil(
 }
 
 // userspaceDNSResolutionEnabled reports whether the project has opted into
-// CSI-side NFS DNS resolution. It defaults to false (legacy behaviour) on any
-// flag-fetch error, so an unreachable or not-yet-deployed flag endpoint keeps
-// today's behaviour.
-func (d *Node) userspaceDNSResolutionEnabled(ctx context.Context) bool {
-	enabled, err := crusoe.GetUserspaceDNSResolutionFlag(
-		ctx, d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
-	if err != nil {
-		klog.Warningf("failed to fetch userspace-DNS-resolution flag, defaulting to legacy resolution: %s",
-			err.Error())
-
-		return false
-	}
-
-	return enabled
+// CSI-side NFS DNS resolution.
+//
+// CANARY (DO NOT MERGE): forced to true to simulate the feature flag rolled out.
+// The real implementation fetches GetUserspaceDNSResolutionFlag and defaults to
+// false on error; here the flag endpoint is not deployed in the test env, so we
+// short-circuit to exercise the userspace path end to end.
+func (d *Node) userspaceDNSResolutionEnabled(_ context.Context) bool {
+	return true
 }
 
 // legacyResolveNFSTarget reproduces the previously-released resolution exactly:
