@@ -169,21 +169,42 @@ func TestMaterializeNFSTarget_DNSResolvesToRange(t *testing.T) {
 //
 //nolint:paralleltest // mutates package-level lookupIP via fs.SetLookupIP
 func TestMaterializeNFSTarget_SortsOutOfOrderResponse(t *testing.T) {
-	withStubLookupIP(t, func(_ context.Context, _, _ string) ([]net.IP, error) {
-		// Deliberately reverse order: DNS hands us testIPv4B (higher) first.
-		return []net.IP{net.ParseIP(testIPv4B), net.ParseIP(testIPv4A)}, nil
-	})
+	// Cover reversal in each octet (and a 3-element shuffle) so the sort is
+	// exercised across the whole address, not just the leading octet.
+	cases := []struct {
+		name      string
+		wantHost  string
+		wantPorts string
+		in        []string // resolver order (deliberately out of order)
+	}{
+		{"first octet", testIPv4A, testIPv4A + "-" + testIPv4B, []string{testIPv4B, testIPv4A}},
+		{"last octet", "1.1.1.1", "1.1.1.1-1.1.1.2", []string{"1.1.1.2", "1.1.1.1"}},
+		{"third octet", "1.1.1.1", "1.1.1.1-1.1.2.1", []string{"1.1.2.1", "1.1.1.1"}},
+		{"second octet", "1.1.9.9", "1.1.9.9-1.2.1.1", []string{"1.2.1.1", "1.1.9.9"}},
+		{"three shuffled", "1.1.1.1", "1.1.1.1-1.1.1.3", []string{"1.1.1.3", "1.1.1.1", "1.1.1.2"}},
+	}
 
-	gotHost, gotPorts, err := fs.MaterializeNFSTarget(context.Background(), testHost, testDNS)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if gotHost != testIPv4A {
-		t.Errorf("host = %q, want %q (must be the lowest IP after sort)", gotHost, testIPv4A)
-	}
-	want := testIPv4A + "-" + testIPv4B
-	if gotPorts != want {
-		t.Errorf("remotePorts = %q, want %q (sorted dash-range)", gotPorts, want)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ips := make([]net.IP, 0, len(tc.in))
+			for _, s := range tc.in {
+				ips = append(ips, net.ParseIP(s))
+			}
+			withStubLookupIP(t, func(_ context.Context, _, _ string) ([]net.IP, error) {
+				return ips, nil
+			})
+
+			gotHost, gotPorts, err := fs.MaterializeNFSTarget(context.Background(), testHost, testDNS)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if gotHost != tc.wantHost {
+				t.Errorf("host = %q, want %q (lowest IP after sort)", gotHost, tc.wantHost)
+			}
+			if gotPorts != tc.wantPorts {
+				t.Errorf("remotePorts = %q, want %q (sorted dash-range)", gotPorts, tc.wantPorts)
+			}
+		})
 	}
 }
 
