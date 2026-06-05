@@ -24,9 +24,9 @@ const ExpectedVIPRangeLen = 2
 
 // dnsRemotePortsValue is the literal remoteports= value that makes the vastnfs
 // kernel module resolve the hostname via the dns_resolver keyring upcall. The
-// CRUSOE-70481 userspace path exists to avoid emitting this; ResolveNFSTarget
+// userspace-resolution path exists to avoid emitting this; ResolveNFSTarget
 // only returns it as the DnsName fallback (and ResolveNFSTargetLegacy as the
-// pre-70481 default).
+// previously-released default).
 const dnsRemotePortsValue = "dns"
 
 var (
@@ -167,29 +167,29 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 
 // ResolveNFSTarget returns the NFS host and remoteports value to use when
 // mounting the disk based on the data path connectivity fields populated by
-// the storage API (added in CRUSOE-60428). It returns ok=false when the disk
-// carries neither vips nor dns_name, signalling that the caller should fall
-// back to a static configuration.
+// the storage API. It returns ok=false when the disk carries neither vips nor
+// dns_name, signalling that the caller should fall back to a static
+// configuration.
 //
-// Vips is preferred over DnsName (CRUSOE-70481): the VIP list is the
-// authoritative VIP set from the storage API and bypasses OVN's DNS intercept,
-// which has produced ENOKEY, EPROTONOSUPPORT and the musl REFUSED failure
-// modes from INC-450 in production. When vips is populated we return the
-// kernel-range form "<startIP>-<endIP>" so remoteports= expands to every IP
-// in the range without invoking the dns_resolver keyring upcall. Only when
-// vips is empty do we fall back to dns_name (which the caller will resolve
-// in-process before passing to mount).
+// Vips is preferred over DnsName: the VIP list is the authoritative set from the
+// storage API and lets us mount by explicit IP, bypassing name resolution and
+// the dns_resolver keyring upcall (and the ENOKEY / EPROTONOSUPPORT / refused-
+// AAAA failure modes that path can hit). When vips is populated we return the
+// kernel-range form "<startIP>-<endIP>" so remoteports= expands to every IP in
+// the range without invoking the keyring upcall. Only when vips is empty do we
+// fall back to dns_name (which the caller will resolve in-process before passing
+// to mount).
 //
 // Vips is contracted to be a 2-element [startIP, endIP] range. We tolerate
-// other lengths defensively but warn so the discrepancy is visible. We do
-// NOT comma-join the range endpoints — comma-joining would yield only the
-// two endpoint IPs and drop every IP in between, defeating the load-balancing
-// the range is meant to provide.
+// other lengths defensively but warn so the discrepancy is visible. We do NOT
+// comma-join the range endpoints — comma-joining would yield only the two
+// endpoint IPs and drop every IP in between, defeating the load-balancing the
+// range is meant to provide.
 //
-// Vips are prioritized absolutely when usable (CRUSOE-70481): we fall through
-// to DnsName only when no usable Vip exists (empty, or every entry filtered
-// out as unspecified/non-IPv4), so a stray :: or 0.0.0.0 from the API can
-// never strand a mount.
+// Vips are prioritized absolutely when usable: we fall through to DnsName only
+// when no usable Vip exists (empty, or every entry filtered out as
+// unspecified/non-IPv4), so a stray :: or 0.0.0.0 from the API can never strand
+// a mount.
 func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
 	if host, remotePorts, ok := resolveFromVIPs(disk); ok {
 		return host, remotePorts, true
@@ -201,7 +201,7 @@ func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, o
 	return "", "", false
 }
 
-// ResolveNFSTargetLegacy is the pre-CRUSOE-70481 resolution order: DnsName
+// ResolveNFSTargetLegacy is the previously-released resolution order: DnsName
 // first (the kernel resolves it via remoteports=dns), then Vips. It is the
 // behaviour the CSI driver reproduces when the userspace-DNS feature flag is
 // off or the new path fails, keeping FF-off byte-for-byte identical to the

@@ -86,7 +86,7 @@ func TestResolveNFSTarget(t *testing.T) {
 	}
 }
 
-// TestResolveNFSTarget_FiltersUnspecifiedVIPs guards the CRUSOE-70481 Vips
+// TestResolveNFSTarget_FiltersUnspecifiedVIPs guards the Vips
 // safety filter: unspecified / non-IPv4 entries are dropped before the
 // kernel-range is computed, so a stray :: or 0.0.0.0 from the API can never be
 // stamped into the mount command.
@@ -126,7 +126,7 @@ func TestResolveNFSTarget_AllUnusableVIPsFallToDNS(t *testing.T) {
 	}
 }
 
-// TestResolveNFSTargetLegacy_PrefersDnsName pins the pre-CRUSOE-70481 ordering
+// TestResolveNFSTargetLegacy_PrefersDnsName pins the previously-released ordering
 // (DnsName first) that the FF-off / fallback path must reproduce byte-for-byte:
 // when both DnsName and Vips are present, legacy resolves to DnsName/"dns",
 // whereas the new ResolveNFSTarget prefers Vips.

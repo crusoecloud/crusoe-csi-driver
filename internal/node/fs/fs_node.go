@@ -18,7 +18,7 @@ import (
 
 const (
 	crusoeCloudDNSNFSHost = "nfs.crusoecloudcompute.com"
-	icatLocation          = "eu-iceland1-a"
+	dnsFallbackLocation   = "eu-iceland1-a"
 	dnsRemotePorts        = "dns"
 )
 
@@ -95,17 +95,18 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 // resolveNFSTarget determines the NFS host and remoteports value to use when
 // publishing a volume.
 //
-// The entire userspace-resolution path (CRUSOE-70481) is gated behind a single
-// feature flag. When the flag is OFF — or unavailable — behaviour is identical
-// to the released driver: legacyResolveNFSTarget emits the target (possibly the
-// literal "dns") and the kernel resolves it via the dns_resolver keyring upcall.
+// The entire userspace-resolution path is gated behind a single feature flag.
+// When the flag is OFF — or unavailable — behaviour is identical to the released
+// driver: legacyResolveNFSTarget emits the target (possibly the literal "dns")
+// and the kernel resolves it via the dns_resolver keyring upcall.
 //
 // When the flag is ON, we prefer the per-disk target (Vips absolutely, else
 // DnsName) and resolve it in-process so the kernel never receives "dns" — this
-// avoids the keyring upcall that produced the ENOKEY race plus the
-// EPROTONOSUPPORT / musl-REFUSED failures (INC-450, INC-483). Any failure or
-// timeout in the new path falls back wholesale to legacyResolveNFSTarget, so a
-// resolver problem is never worse than today's behaviour.
+// avoids the keyring upcall and the resolver failure modes it can hit (an ENOKEY
+// race between concurrent mounts, and EPROTONOSUPPORT / refused-AAAA failures
+// from an unspecified-IPv6 answer). Any failure or timeout in the new path falls
+// back wholesale to legacyResolveNFSTarget, so a resolver problem is never worse
+// than today's behaviour.
 func (d *Node) resolveNFSTarget(
 	ctx context.Context, volumeID string, nfsEnabled bool,
 ) (nfsHost, nfsRemotePorts string) {
@@ -116,8 +117,8 @@ func (d *Node) resolveNFSTarget(
 	}
 
 	// FF on: prefer the per-disk target (Vips-first), else fall to the legacy
-	// configured/ICAT default. Either may be a "dns" target; materialize it so
-	// the kernel never performs the dns_resolver upcall.
+	// configured default. Either may be a "dns" target; materialize it so the
+	// kernel never performs the dns_resolver upcall.
 	rawHost, rawRemotePorts, ok := "", "", false
 	if disk != nil {
 		rawHost, rawRemotePorts, ok = crusoe.ResolveNFSTarget(disk)
@@ -142,7 +143,7 @@ func (d *Node) resolveNFSTarget(
 
 // fetchDiskOrNil returns the disk for volumeID, or nil if NFS is disabled, the
 // volumeID is empty, or the lookup fails. A nil disk drives resolution to the
-// configured/ICAT defaults.
+// configured defaults.
 func (d *Node) fetchDiskOrNil(
 	ctx context.Context, volumeID string, nfsEnabled bool,
 ) *crusoeapi.DiskV1Alpha5 {
@@ -160,9 +161,9 @@ func (d *Node) fetchDiskOrNil(
 }
 
 // userspaceDNSResolutionEnabled reports whether the project has opted into
-// CSI-side NFS DNS resolution (CRUSOE-70481). It defaults to false (legacy
-// behaviour) on any flag-fetch error, so an unreachable or not-yet-deployed
-// flag endpoint keeps today's behaviour.
+// CSI-side NFS DNS resolution. It defaults to false (legacy behaviour) on any
+// flag-fetch error, so an unreachable or not-yet-deployed flag endpoint keeps
+// today's behaviour.
 func (d *Node) userspaceDNSResolutionEnabled(ctx context.Context) bool {
 	enabled, err := crusoe.GetUserspaceDNSResolutionFlag(
 		ctx, d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
@@ -176,11 +177,11 @@ func (d *Node) userspaceDNSResolutionEnabled(ctx context.Context) bool {
 	return enabled
 }
 
-// legacyResolveNFSTarget reproduces the pre-CRUSOE-70481 resolution exactly:
+// legacyResolveNFSTarget reproduces the previously-released resolution exactly:
 // DnsName-first per-disk resolution, then the configured CLI-flag defaults or
-// the ICAT secondary-cluster DNS escape hatch. It performs NO userspace
-// materialization — a "dns" remoteports value is handed to the kernel as-is.
-// This is the behaviour the FF-off path and every failure/timeout fall back to.
+// the secondary-cluster DNS fallback. It performs NO userspace materialization
+// — a "dns" remoteports value is handed to the kernel as-is. This is the
+// behaviour the FF-off path and every failure/timeout fall back to.
 func (d *Node) legacyResolveNFSTarget(
 	ctx context.Context, disk *crusoeapi.DiskV1Alpha5,
 ) (nfsHost, nfsRemotePorts string) {
@@ -194,9 +195,9 @@ func (d *Node) legacyResolveNFSTarget(
 
 	nfsHost = d.NFSHost
 	nfsRemotePorts = d.NFSRemotePorts
-	klog.Infof("Host instance location: %q, checking against icatLocation: %q", d.HostInstance.Location, icatLocation)
+	klog.Infof("Host instance location: %q, DNS-fallback location: %q", d.HostInstance.Location, dnsFallbackLocation)
 	if d.useDNSForMount(ctx) {
-		klog.Warningf("falling back to ICAT DNS-based NFS host: %s", crusoeCloudDNSNFSHost)
+		klog.Warningf("falling back to DNS-based NFS host: %s", crusoeCloudDNSNFSHost)
 		nfsHost = crusoeCloudDNSNFSHost
 		nfsRemotePorts = dnsRemotePorts
 	} else {
@@ -216,7 +217,7 @@ func (d *Node) useDNSForMount(ctx context.Context) bool {
 		return false
 	}
 
-	return useSecondaryVast && d.HostInstance.Location == icatLocation
+	return useSecondaryVast && d.HostInstance.Location == dnsFallbackLocation
 }
 
 func (d *Node) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublishVolumeRequest) (

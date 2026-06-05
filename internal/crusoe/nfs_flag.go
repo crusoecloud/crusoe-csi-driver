@@ -90,7 +90,7 @@ func GetVastUseSecondaryClusterFlag(
 }
 
 // GetUserspaceDNSResolutionFlag returns true if the project has opted into
-// CSI-side (userspace) NFS DNS resolution (CRUSOE-70481). When false — which
+// CSI-side (userspace) NFS DNS resolution. When false — which
 // includes the case where the route does not yet exist (getFlag returns a
 // non-200 error) — the caller falls back to the legacy kernel dns_resolver
 // path. This makes the flag safe to consume before the server side ships:
