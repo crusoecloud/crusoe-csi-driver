@@ -21,12 +21,16 @@ var ErrNoUsableNFSAddress = errors.New("no usable IPv4 address for NFS target")
 // caller falls back to the default "dns" mount behaviour.
 const nfsResolveTimeout = 5 * time.Second
 
-// lookupIP is a package-level indirection over a pure-Go resolver so tests can
-// stub DNS without real network calls. PreferGo avoids the cgo/libc resolver,
-// whose parallel A/AAAA handling can fail an otherwise-valid lookup when the
-// AAAA query is refused. The signature mirrors
-// net.Resolver.LookupIP(ctx, network, host). Production callers must not
-// reassign this outside of tests.
+// lookupIP is a package-level indirection over the resolver so tests can stub
+// DNS without real network calls. The signature mirrors
+// net.Resolver.LookupIP(ctx, network, host); production callers must not
+// reassign it outside of tests.
+//
+// PreferGo explicitly selects the pure-Go resolver. The binary is built with
+// CGO_ENABLED=0, so the pure-Go resolver is already the only one compiled in;
+// PreferGo is kept as an explicit guard so a future cgo-enabled build can't
+// silently fall back to the libc resolver. (AAAA is avoided separately, by the
+// "ip4" network argument passed in materializeNFSTarget — not by PreferGo.)
 //
 //nolint:gochecknoglobals // deliberate package-private test seam
 var lookupIP = (&net.Resolver{PreferGo: true}).LookupIP
