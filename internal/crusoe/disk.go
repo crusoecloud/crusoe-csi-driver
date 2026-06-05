@@ -204,14 +204,39 @@ func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, o
 // ResolveNFSTargetLegacy is the previously-released resolution order: DnsName
 // first (the kernel resolves it via remoteports=dns), then Vips. It is the
 // behaviour the CSI driver reproduces when the userspace-DNS feature flag is
-// off or the new path fails, keeping FF-off byte-for-byte identical to the
-// released driver. Unlike ResolveNFSTarget it does NOT prefer Vips.
+// off or the new path fails. Unlike ResolveNFSTarget it does NOT prefer Vips,
+// and it uses legacyResolveFromVIPs (raw Vips, no filtering or sorting) so the
+// FF-off path stays byte-for-byte identical to the released driver.
 func ResolveNFSTargetLegacy(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
 	if disk.DnsName != "" {
 		return disk.DnsName, dnsRemotePortsValue, true
 	}
 
-	return resolveFromVIPs(disk)
+	return legacyResolveFromVIPs(disk)
+}
+
+// legacyResolveFromVIPs reproduces the previously-released VIP handling
+// verbatim: disk.Vips is used as-is, with no filtering of unspecified addresses
+// and no sorting. This keeps the FF-off path byte-for-byte identical to the
+// released driver; the filtering/sorting variant (resolveFromVIPs) is used only
+// on the new userspace path.
+func legacyResolveFromVIPs(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
+	switch len(disk.Vips) {
+	case 0:
+		return "", "", false
+	case ExpectedVIPRangeLen:
+		return disk.Vips[0], fmt.Sprintf("%s-%s", disk.Vips[0], disk.Vips[1]), true
+	case 1:
+		klog.Warningf("disk %s returned %d vip(s), expected %d ([startIP, endIP]); using single vip %q",
+			disk.Id, len(disk.Vips), ExpectedVIPRangeLen, disk.Vips[0])
+
+		return disk.Vips[0], disk.Vips[0], true
+	default:
+		klog.Warningf("disk %s returned %d vips, expected %d ([startIP, endIP]); using first and last %q-%q",
+			disk.Id, len(disk.Vips), ExpectedVIPRangeLen, disk.Vips[0], disk.Vips[len(disk.Vips)-1])
+
+		return disk.Vips[0], fmt.Sprintf("%s-%s", disk.Vips[0], disk.Vips[len(disk.Vips)-1]), true
+	}
 }
 
 // resolveFromVIPs builds the kernel-range remoteports string ("startIP-endIP")
@@ -233,6 +258,9 @@ func resolveFromVIPs(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok
 
 		return "", "", false
 	case 1:
+		klog.Warningf("disk %s returned %d usable vip(s), expected %d ([startIP, endIP]); using single vip %q",
+			disk.Id, len(vips), ExpectedVIPRangeLen, vips[0])
+
 		return vips[0], vips[0], true
 	default:
 		if len(vips) != ExpectedVIPRangeLen {

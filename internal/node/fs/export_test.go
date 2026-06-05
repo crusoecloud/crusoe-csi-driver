@@ -33,3 +33,19 @@ func SetLookupIP(
 // so tests can match it with errors.Is without taking a package-private
 // dependency.
 var ErrNoUsableNFSAddressForTest = ErrNoUsableNFSAddress
+
+// Test-only re-exports of package-private identifiers so the fs_test package can
+// assert against them without hardcoding values.
+const (
+	DNSFallbackLocation   = dnsFallbackLocation
+	CrusoeCloudDNSNFSHost = crusoeCloudDNSNFSHost
+	DNSRemotePorts        = dnsRemotePorts
+)
+
+// ResolveNFSTargetForTest exposes the unexported resolveNFSTarget method so the
+// fs_test package can exercise the FF-off / FF-on / fallback branching.
+func (d *Node) ResolveNFSTargetForTest(
+	ctx context.Context, volumeID string, nfsEnabled bool,
+) (host, remotePorts string) {
+	return d.resolveNFSTarget(ctx, volumeID, nfsEnabled)
+}

@@ -120,23 +120,32 @@ func (d *Node) resolveNFSTarget(
 		return d.legacyResolveNFSTarget(ctx, disk)
 	}
 
-	// FF on: prefer the per-disk target (Vips-first), else fall to the legacy
-	// configured default. Either may be a "dns" target; materialize it so the
-	// kernel never performs the dns_resolver upcall.
-	rawHost, rawRemotePorts, ok := "", "", false
+	// FF on: prefer the per-disk target (Vips-first). If there is no usable
+	// per-disk target, the legacy result is both the raw source and the
+	// fallback, so resolve it once and reuse it.
+	rawHost, rawRemotePorts, fromVips := "", "", false
 	if disk != nil {
-		rawHost, rawRemotePorts, ok = crusoe.ResolveNFSTarget(disk)
+		rawHost, rawRemotePorts, fromVips = crusoe.ResolveNFSTarget(disk)
 	}
-	if !ok {
+	if !fromVips {
 		rawHost, rawRemotePorts = d.legacyResolveNFSTarget(ctx, disk)
 	}
 
+	// Either target may be a "dns" value; materialize it so the kernel never
+	// performs the dns_resolver upcall.
 	newHost, newRemotePorts, err := materializeNFSTarget(ctx, rawHost, rawRemotePorts)
 	if err != nil {
 		klog.Warningf("userspace NFS resolution failed for volume %s (host=%s remoteports=%s), "+
 			"falling back to legacy behaviour: %s", volumeID, rawHost, rawRemotePorts, err.Error())
 
-		return d.legacyResolveNFSTarget(ctx, disk)
+		if fromVips {
+			// Raw target came from Vips; fall back to the legacy result.
+			return d.legacyResolveNFSTarget(ctx, disk)
+		}
+
+		// Raw target already is the legacy result; reuse it without re-fetching
+		// the feature flag.
+		return rawHost, rawRemotePorts
 	}
 
 	klog.Infof("Resolved NFS target (userspace) for %s: host=%s remoteports=%s (raw host=%s remoteports=%s)",
