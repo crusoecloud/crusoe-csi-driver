@@ -22,12 +22,14 @@ import (
 // 2-element [startIP, endIP] range as defined by the storage API contract.
 const ExpectedVIPRangeLen = 2
 
-// dnsRemotePortsValue is the literal remoteports= value that makes the vastnfs
-// kernel module resolve the hostname via the dns_resolver keyring upcall. The
-// userspace-resolution path exists to avoid emitting this; ResolveNFSTarget
-// only returns it as the DnsName fallback (and ResolveNFSTargetLegacy as the
+// DNSRemotePortsValue is the literal remoteports= value that makes the vastnfs
+// kernel module resolve the hostname via the dns_resolver keyring upcall. This
+// is the single source of truth for the sentinel; the fs package aliases it
+// (rather than re-declaring "dns") so the two cannot silently diverge. The
+// userspace-resolution path exists to avoid emitting this; ResolveNFSTarget only
+// returns it as the DnsName fallback (and ResolveNFSTargetLegacy as the
 // previously-released default).
-const dnsRemotePortsValue = "dns"
+const DNSRemotePortsValue = "dns"
 
 var (
 	ErrUnknownDiskSizeSuffix = errors.New("unknown disk size suffix")
@@ -191,11 +193,14 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 // unspecified/non-IPv4), so a stray :: or 0.0.0.0 from the API can never strand
 // a mount.
 func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
+	if disk == nil {
+		return "", "", false
+	}
 	if host, remotePorts, ok := resolveFromVIPs(disk); ok {
 		return host, remotePorts, true
 	}
 	if disk.DnsName != "" {
-		return disk.DnsName, dnsRemotePortsValue, true
+		return disk.DnsName, DNSRemotePortsValue, true
 	}
 
 	return "", "", false
@@ -208,8 +213,11 @@ func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, o
 // and it uses legacyResolveFromVIPs (raw Vips, no filtering or sorting) so the
 // FF-off path stays byte-for-byte identical to the released driver.
 func ResolveNFSTargetLegacy(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
+	if disk == nil {
+		return "", "", false
+	}
 	if disk.DnsName != "" {
-		return disk.DnsName, dnsRemotePortsValue, true
+		return disk.DnsName, DNSRemotePortsValue, true
 	}
 
 	return legacyResolveFromVIPs(disk)
@@ -252,7 +260,7 @@ func resolveFromVIPs(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok
 	switch len(vips) {
 	case 0:
 		if len(disk.Vips) > 0 {
-			klog.Warningf("disk %s: all %d vip(s) were unusable (unspecified/non-IPv4); falling through",
+			klog.Warningf("disk %s: all %d vip(s) were unusable (unspecified/non-IPv4); falling back to DnsName",
 				disk.Id, len(disk.Vips))
 		}
 

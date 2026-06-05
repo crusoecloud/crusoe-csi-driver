@@ -61,10 +61,13 @@ var lookupIP = (&net.Resolver{PreferGo: true}).LookupIP
 //     source string ("<ip>:/volumes/<id>"), so the userspace mount tool does
 //     not need its own hostname resolution either.
 //   - newRemotePorts: kernel-range form "<minIP>-<maxIP>". A comma-separated
-//     list is rejected by the NFS module with EINVAL, so only the range form is
-//     used. If the response is non-contiguous the range may span IPs that are
-//     not endpoints; those expand harmlessly because the client only opens
-//     connections the server accepts.
+//     list is rejected by the NFS module with EINVAL (observed on the deployed
+//     vastnfs version), so only the range form is used. This assumes the NFS
+//     endpoint resolves to a CONTIGUOUS IPv4 block (true for the VAST VIP pool):
+//     a discontiguous answer would make the range span absent IPs, and the
+//     client would pay a TCP connect timeout per absent IP before proceeding. If
+//     the endpoint ever resolves to a discontiguous set, switch this to per-IP
+//     mounts instead of a range.
 func materializeNFSTarget(ctx context.Context, host, remotePorts string) (newHost, newRemotePorts string, err error) {
 	if remotePorts != dnsRemotePorts {
 		return host, remotePorts, nil

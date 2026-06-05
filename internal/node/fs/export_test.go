@@ -16,17 +16,20 @@ import (
 //nolint:gochecknoglobals // deliberate test seam
 var MaterializeNFSTarget = materializeNFSTarget
 
-// SetLookupIP swaps the package-private DNS lookup function for the duration
-// of a test and returns the previous value so callers can restore it via
-// t.Cleanup or defer. The signature mirrors net.Resolver.LookupIP so tests can
-// assert the network ("ip4") and FQDN host passed by materializeNFSTarget.
+// SetLookupIP swaps the package-private DNS lookup function for the duration of
+// a test and returns a restore func the caller must defer (or register with
+// t.Cleanup). Returning the restore closure — rather than the previous value —
+// makes the restoration obligation explicit, so a caller can't accidentally
+// leave package state mutated for later tests in the same binary. The signature
+// mirrors net.Resolver.LookupIP so tests can assert the network ("ip4") and FQDN
+// host passed by materializeNFSTarget.
 func SetLookupIP(
 	fn func(ctx context.Context, network, host string) ([]net.IP, error),
-) func(ctx context.Context, network, host string) ([]net.IP, error) {
+) (restore func()) {
 	prev := lookupIP
 	lookupIP = fn
 
-	return prev
+	return func() { lookupIP = prev }
 }
 
 // ErrNoUsableNFSAddressForTest re-exports the sentinel error from resolve.go

@@ -34,12 +34,12 @@ func withStubLookupIP(
 	t.Helper()
 
 	calls := 0
-	prev := fs.SetLookupIP(func(ctx context.Context, network, host string) ([]net.IP, error) {
+	restore := fs.SetLookupIP(func(ctx context.Context, network, host string) ([]net.IP, error) {
 		calls++
 
 		return fn(ctx, network, host)
 	})
-	t.Cleanup(func() { fs.SetLookupIP(prev) })
+	t.Cleanup(restore)
 
 	return &calls
 }

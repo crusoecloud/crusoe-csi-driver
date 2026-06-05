@@ -18,12 +18,20 @@ import (
 
 const (
 	crusoeCloudDNSNFSHost = "nfs.crusoecloudcompute.com"
-	dnsFallbackLocation   = "eu-iceland1-a"
-	// dnsRemotePorts is the literal vastnfs `remoteports=dns` value: it tells the
-	// NFS kernel module to resolve the server name itself (via the dns_resolver
-	// keyring upcall) instead of being handed an explicit IP list. It is a
-	// sentinel string, not a port specification.
-	dnsRemotePorts = "dns"
+
+	// dnsFallbackLocation is the single region where the legacy secondary-cluster
+	// fallback routes mounts through DNS (remoteports=dns) instead of configured
+	// IPs (see useDNSForMount). It is a deliberate, region-scoped carveout; the
+	// value is a public region slug. If the carveout needs to outlive this
+	// region, drive it off a CLI flag rather than hardcoding.
+	dnsFallbackLocation = "eu-iceland1-a"
+
+	// dnsRemotePorts aliases crusoe.DNSRemotePortsValue (the single source of
+	// truth for the vastnfs "remoteports=dns" sentinel) so the two packages
+	// cannot silently diverge. The value "dns" tells the NFS kernel module to
+	// resolve the server name itself via the dns_resolver keyring upcall, rather
+	// than being handed an explicit IP list.
+	dnsRemotePorts = crusoe.DNSRemotePortsValue
 )
 
 type Node struct {
