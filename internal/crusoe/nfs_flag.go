@@ -14,6 +14,7 @@ import (
 const (
 	nfsFlagRouteTemplate                     = "%s/projects/%s/storage/nfs/is-using-nfs"
 	vastUseSecondaryClusterFlagRouteTemplate = "%s/projects/%s/storage/nfs/is-using-secondary-cluster"
+	userspaceDNSResolutionFlagRouteTemplate  = "%s/projects/%s/storage/nfs/is-using-userspace-dns-resolution"
 	DEBUG                                    = 8
 )
 
@@ -84,6 +85,22 @@ func GetVastUseSecondaryClusterFlag(
 	apiEndpoint, projectID string,
 ) (bool, error) {
 	flagRoute := fmt.Sprintf(vastUseSecondaryClusterFlagRouteTemplate, apiEndpoint, projectID)
+
+	return getFlag(ctx, crusoeHTTPClient, flagRoute)
+}
+
+// GetUserspaceDNSResolutionFlag returns true if the project has opted into
+// CSI-side (userspace) NFS DNS resolution. When false — which
+// includes the case where the route does not yet exist (getFlag returns a
+// non-200 error) — the caller falls back to the legacy kernel dns_resolver
+// path. This makes the flag safe to consume before the server side ships:
+// until the route exists and the flag is flipped on, behaviour is unchanged.
+func GetUserspaceDNSResolutionFlag(
+	ctx context.Context,
+	crusoeHTTPClient *http.Client,
+	apiEndpoint, projectID string,
+) (bool, error) {
+	flagRoute := fmt.Sprintf(userspaceDNSResolutionFlagRouteTemplate, apiEndpoint, projectID)
 
 	return getFlag(ctx, crusoeHTTPClient, flagRoute)
 }

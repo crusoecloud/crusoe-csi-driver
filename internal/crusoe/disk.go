@@ -1,9 +1,12 @@
 package crusoe
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -18,6 +21,15 @@ import (
 // ExpectedVIPRangeLen is the expected length of DiskV1Alpha5.Vips: a
 // 2-element [startIP, endIP] range as defined by the storage API contract.
 const ExpectedVIPRangeLen = 2
+
+// DNSRemotePortsValue is the literal remoteports= value that makes the vastnfs
+// kernel module resolve the hostname via the dns_resolver keyring upcall. This
+// is the single source of truth for the sentinel; the fs package aliases it
+// (rather than re-declaring "dns") so the two cannot silently diverge. The
+// userspace-resolution path exists to avoid emitting this; ResolveNFSTarget only
+// returns it as the DnsName fallback (and ResolveNFSTargetLegacy as the
+// previously-released default).
+const DNSRemotePortsValue = "dns"
 
 var (
 	ErrUnknownDiskSizeSuffix = errors.New("unknown disk size suffix")
@@ -157,16 +169,66 @@ func CheckDiskMatchesRequest(disk *crusoeapi.DiskV1Alpha5,
 
 // ResolveNFSTarget returns the NFS host and remoteports value to use when
 // mounting the disk based on the data path connectivity fields populated by
-// the storage API (added in CRUSOE-60428). It returns ok=false when the disk
-// carries neither dns_name nor vips, signalling that the caller should fall
-// back to a static configuration.
+// the storage API. It returns ok=false when the disk carries neither vips nor
+// dns_name, signalling that the caller should fall back to a static
+// configuration.
 //
-// vips is contracted to be a 2-element [startIP, endIP] range; we tolerate
-// other lengths defensively but warn so the discrepancy is visible.
+// Vips is preferred over DnsName: the VIP list is the authoritative set from the
+// storage API and lets us mount by explicit IP, bypassing name resolution and
+// the dns_resolver keyring upcall (and the ENOKEY / EPROTONOSUPPORT / refused-
+// AAAA failure modes that path can hit). When vips is populated we return the
+// kernel-range form "<startIP>-<endIP>" so remoteports= expands to every IP in
+// the range without invoking the keyring upcall. Only when vips is empty do we
+// fall back to dns_name (which the caller will resolve in-process before passing
+// to mount).
+//
+// Vips is contracted to be a 2-element [startIP, endIP] range. We tolerate
+// other lengths defensively but warn so the discrepancy is visible. We do NOT
+// comma-join the range endpoints — comma-joining would yield only the two
+// endpoint IPs and drop every IP in between, defeating the load-balancing the
+// range is meant to provide.
+//
+// Vips are prioritized absolutely when usable: we fall through to DnsName only
+// when no usable Vip exists (empty, or every entry filtered out as
+// unspecified/non-IPv4), so a stray :: or 0.0.0.0 from the API can never strand
+// a mount.
 func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
-	if disk.DnsName != "" {
-		return disk.DnsName, "dns", true
+	if disk == nil {
+		return "", "", false
 	}
+	if host, remotePorts, ok := resolveFromVIPs(disk); ok {
+		return host, remotePorts, true
+	}
+	if disk.DnsName != "" {
+		return disk.DnsName, DNSRemotePortsValue, true
+	}
+
+	return "", "", false
+}
+
+// ResolveNFSTargetLegacy is the previously-released resolution order: DnsName
+// first (the kernel resolves it via remoteports=dns), then Vips. It is the
+// behaviour the CSI driver reproduces when the userspace-DNS feature flag is
+// off or the new path fails. Unlike ResolveNFSTarget it does NOT prefer Vips,
+// and it uses legacyResolveFromVIPs (raw Vips, no filtering or sorting) so the
+// FF-off path stays byte-for-byte identical to the released driver.
+func ResolveNFSTargetLegacy(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
+	if disk == nil {
+		return "", "", false
+	}
+	if disk.DnsName != "" {
+		return disk.DnsName, DNSRemotePortsValue, true
+	}
+
+	return legacyResolveFromVIPs(disk)
+}
+
+// legacyResolveFromVIPs reproduces the previously-released VIP handling
+// verbatim: disk.Vips is used as-is, with no filtering of unspecified addresses
+// and no sorting. This keeps the FF-off path byte-for-byte identical to the
+// released driver; the filtering/sorting variant (resolveFromVIPs) is used only
+// on the new userspace path.
+func legacyResolveFromVIPs(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
 	switch len(disk.Vips) {
 	case 0:
 		return "", "", false
@@ -183,6 +245,63 @@ func ResolveNFSTarget(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, o
 
 		return disk.Vips[0], fmt.Sprintf("%s-%s", disk.Vips[0], disk.Vips[len(disk.Vips)-1]), true
 	}
+}
+
+// resolveFromVIPs builds the kernel-range remoteports string ("startIP-endIP")
+// from a disk's vips field. The first IP doubles as the mount-source host so
+// busybox-mount in the Alpine CSI pod never has to do its own getaddrinfo
+// either. The hyphenated range form is parsed by the Linux NFS client and
+// expanded to every IP between start and end inclusive.
+//
+// Entries are filtered (unspecified/non-IPv4 dropped) and sorted ascending so
+// (first, last) is always a valid range; ok=false when nothing usable remains.
+func resolveFromVIPs(disk *crusoeapi.DiskV1Alpha5) (host, remotePorts string, ok bool) {
+	vips := filterUsableVIPs(disk.Vips)
+	switch len(vips) {
+	case 0:
+		if len(disk.Vips) > 0 {
+			klog.Warningf("disk %s: all %d vip(s) were unusable (unspecified/non-IPv4); falling back to DnsName",
+				disk.Id, len(disk.Vips))
+		}
+
+		return "", "", false
+	case 1:
+		klog.Warningf("disk %s returned %d usable vip(s), expected %d ([startIP, endIP]); using single vip %q",
+			disk.Id, len(vips), ExpectedVIPRangeLen, vips[0])
+
+		return vips[0], vips[0], true
+	default:
+		if len(vips) != ExpectedVIPRangeLen {
+			klog.Warningf("disk %s returned %d usable vips, expected %d ([startIP, endIP]); using min-max range %q-%q",
+				disk.Id, len(vips), ExpectedVIPRangeLen, vips[0], vips[len(vips)-1])
+		}
+
+		return vips[0], fmt.Sprintf("%s-%s", vips[0], vips[len(vips)-1]), true
+	}
+}
+
+// filterUsableVIPs drops unspecified (::, 0.0.0.0) and non-parseable entries,
+// normalizes IPv4-mapped IPv6 to IPv4, drops non-IPv4 (VAST VIPs are IPv4-only
+// at the NFS data plane), and returns the result sorted ascending by network
+// byte order so callers can take (first, last) as a kernel range.
+func filterUsableVIPs(vips []string) []string {
+	usable := make([]string, 0, len(vips))
+	for _, v := range vips {
+		ip := net.ParseIP(strings.TrimSpace(v))
+		if ip == nil || ip.IsUnspecified() {
+			continue
+		}
+		v4 := ip.To4()
+		if v4 == nil {
+			continue
+		}
+		usable = append(usable, v4.String())
+	}
+	sort.Slice(usable, func(i, j int) bool {
+		return bytes.Compare(net.ParseIP(usable[i]).To4(), net.ParseIP(usable[j]).To4()) < 0
+	})
+
+	return usable
 }
 
 func GetVolumeFromDisk(disk *crusoeapi.DiskV1Alpha5,

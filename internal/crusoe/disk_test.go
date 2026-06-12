@@ -7,6 +7,11 @@ import (
 	"github.com/crusoecloud/crusoe-csi-driver/internal/crusoe"
 )
 
+const (
+	testVIPHost  = "1.2.3.4"
+	testVIPRange = "1.2.3.4-1.2.3.8"
+)
+
 func TestResolveNFSTarget(t *testing.T) {
 	t.Parallel()
 
@@ -32,20 +37,20 @@ func TestResolveNFSTarget(t *testing.T) {
 			wantOK:          true,
 		},
 		{
-			name: "dns name preferred over vips",
+			name: "vips preferred over dns name",
 			disk: crusoeapi.DiskV1Alpha5{
 				DnsName: "nfs.crusoecloudcompute.com",
-				Vips:    []string{"1.2.3.4", "1.2.3.8"},
+				Vips:    []string{testVIPHost, "1.2.3.8"},
 			},
-			wantHost:        "nfs.crusoecloudcompute.com",
-			wantRemotePorts: "dns",
+			wantHost:        testVIPHost,
+			wantRemotePorts: testVIPRange,
 			wantOK:          true,
 		},
 		{
-			name:            "vip range produces hyphenated remoteports",
-			disk:            crusoeapi.DiskV1Alpha5{Vips: []string{"1.2.3.4", "1.2.3.8"}},
-			wantHost:        "1.2.3.4",
-			wantRemotePorts: "1.2.3.4-1.2.3.8",
+			name:            "vip range produces kernel-range remoteports",
+			disk:            crusoeapi.DiskV1Alpha5{Vips: []string{testVIPHost, "1.2.3.8"}},
+			wantHost:        testVIPHost,
+			wantRemotePorts: testVIPRange,
 			wantOK:          true,
 		},
 		{
@@ -56,10 +61,10 @@ func TestResolveNFSTarget(t *testing.T) {
 			wantOK:          true,
 		},
 		{
-			name:            "more than two vips uses first and last",
-			disk:            crusoeapi.DiskV1Alpha5{Vips: []string{"1.2.3.4", "1.2.3.5", "1.2.3.8"}},
-			wantHost:        "1.2.3.4",
-			wantRemotePorts: "1.2.3.4-1.2.3.8",
+			name:            "more than two vips uses first and last as range endpoints",
+			disk:            crusoeapi.DiskV1Alpha5{Vips: []string{testVIPHost, "1.2.3.5", "1.2.3.8"}},
+			wantHost:        testVIPHost,
+			wantRemotePorts: testVIPRange,
 			wantOK:          true,
 		},
 	}
@@ -78,5 +83,93 @@ func TestResolveNFSTarget(t *testing.T) {
 				t.Errorf("ok = %v, want %v", gotOK, tt.wantOK)
 			}
 		})
+	}
+}
+
+// TestResolveNFSTarget_FiltersUnspecifiedVIPs guards the Vips
+// safety filter: unspecified / non-IPv4 entries are dropped before the
+// kernel-range is computed, so a stray :: or 0.0.0.0 from the API can never be
+// stamped into the mount command.
+func TestResolveNFSTarget_FiltersUnspecifiedVIPs(t *testing.T) {
+	t.Parallel()
+
+	disk := crusoeapi.DiskV1Alpha5{Vips: []string{"::", testVIPHost, "0.0.0.0", "1.2.3.8"}}
+	host, remotePorts, ok := crusoe.ResolveNFSTarget(&disk)
+	if !ok {
+		t.Fatal("ok = false, want true")
+	}
+	if host != testVIPHost {
+		t.Errorf("host = %q, want %q", host, testVIPHost)
+	}
+	if remotePorts != testVIPRange {
+		t.Errorf("remotePorts = %q, want %q (unspecified entries filtered)", remotePorts, testVIPRange)
+	}
+}
+
+// TestResolveNFSTarget_AllUnusableVIPsFallToDNS ensures that when every Vip is
+// unusable we do NOT fail — we fall through to DnsName so the mount can still
+// proceed via the legacy path. "Prioritize Vips absolutely" means absolutely
+// when they are usable, not when they are garbage.
+func TestResolveNFSTarget_AllUnusableVIPsFallToDNS(t *testing.T) {
+	t.Parallel()
+
+	disk := crusoeapi.DiskV1Alpha5{
+		Vips:    []string{"::", "0.0.0.0"},
+		DnsName: "nfs.crusoecloudcompute.com",
+	}
+	host, remotePorts, ok := crusoe.ResolveNFSTarget(&disk)
+	if !ok {
+		t.Fatal("ok = false, want true (should fall through to DnsName)")
+	}
+	if host != "nfs.crusoecloudcompute.com" || remotePorts != "dns" {
+		t.Errorf("host=%q remotePorts=%q, want DnsName/\"dns\"", host, remotePorts)
+	}
+}
+
+// TestResolveNFSTargetLegacy_PrefersDnsName pins the previously-released ordering
+// (DnsName first) that the FF-off / fallback path must reproduce byte-for-byte:
+// when both DnsName and Vips are present, legacy resolves to DnsName/"dns",
+// whereas the new ResolveNFSTarget prefers Vips.
+func TestResolveNFSTargetLegacy_PrefersDnsName(t *testing.T) {
+	t.Parallel()
+
+	disk := crusoeapi.DiskV1Alpha5{
+		DnsName: "nfs.crusoecloudcompute.com",
+		Vips:    []string{testVIPHost, "1.2.3.8"},
+	}
+
+	legacyHost, legacyPorts, ok := crusoe.ResolveNFSTargetLegacy(&disk)
+	if !ok {
+		t.Fatal("legacy ok = false, want true")
+	}
+	if legacyHost != "nfs.crusoecloudcompute.com" || legacyPorts != "dns" {
+		t.Errorf("legacy host=%q ports=%q, want DnsName/\"dns\" (DnsName-first)", legacyHost, legacyPorts)
+	}
+
+	// Contrast: the new (Vips-first) resolver must pick Vips for the same disk.
+	newHost, newPorts, _ := crusoe.ResolveNFSTarget(&disk)
+	if newHost != testVIPHost || newPorts != testVIPRange {
+		t.Errorf("new host=%q ports=%q, want Vips range (Vips-first)", newHost, newPorts)
+	}
+}
+
+func TestResolveNFSTargetLegacy_VipsWhenNoDnsName(t *testing.T) {
+	t.Parallel()
+
+	disk := crusoeapi.DiskV1Alpha5{Vips: []string{testVIPHost, "1.2.3.8"}}
+	host, remotePorts, ok := crusoe.ResolveNFSTargetLegacy(&disk)
+	if !ok {
+		t.Fatal("ok = false, want true")
+	}
+	if host != testVIPHost || remotePorts != testVIPRange {
+		t.Errorf("host=%q remotePorts=%q, want Vips range", host, remotePorts)
+	}
+}
+
+func TestResolveNFSTargetLegacy_EmptyFallsThrough(t *testing.T) {
+	t.Parallel()
+
+	if _, _, ok := crusoe.ResolveNFSTargetLegacy(&crusoeapi.DiskV1Alpha5{}); ok {
+		t.Error("ok = true, want false for empty disk")
 	}
 }
