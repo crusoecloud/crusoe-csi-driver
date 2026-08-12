@@ -276,9 +276,9 @@ func (d *Node) NodeExpandVolume(_ context.Context, _ *csi.NodeExpandVolumeReques
 	*csi.NodeExpandVolumeResponse,
 	error,
 ) {
-	klog.Errorf("%s: NodeGetVolumeStats", common.ErrNotImplemented)
+	klog.Errorf("%s: NodeExpandVolume", common.ErrNotImplemented)
 
-	return nil, status.Errorf(codes.Unimplemented, "%s: NodeGetVolumeStats", common.ErrNotImplemented)
+	return nil, status.Errorf(codes.Unimplemented, "%s: NodeExpandVolume", common.ErrNotImplemented)
 }
 
 func (d *Node) NodeGetCapabilities(_ context.Context, _ *csi.NodeGetCapabilitiesRequest) (
