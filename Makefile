@@ -67,6 +67,31 @@ lint-ci: ## Verifies `golangci-lint` passes and outputs in CI-friendly format
 	@golangci-lint version
 	@golangci-lint run ./... --timeout=10m --out-format code-climate > golangci-lint.json
 
+# Pin the testing repo tag: changes there can affect how these tests should be run here. Same
+# consumption pattern as region-coordinator, kubernetes-manager, and storms. Overridable so a run can
+# point at a testing branch before that work is tagged.
+FUNCTEST_VERSION ?= v0.0.414
+GOTESTSUM_VERSION ?= v1.13.0
+
+.PHONY: functest-ci
+functest-ci: ## Runs the CSI storage tests from the testing repo against this build of the driver
+	@echo "==> $@"
+	@go install gotest.tools/gotestsum@${GOTESTSUM_VERSION}
+	@go get gitlab.com/crusoeenergy/island/testing/functionality/utils@${FUNCTEST_VERSION}
+	@git clone --branch ${FUNCTEST_VERSION} --single-branch https://gitlab.com/crusoeenergy/island/testing.git && \
+		go run testing/functionality/cmd/slack_claim/main.go -service="crusoe-csi-driver" -timestampfile="functest_slack_timestamp" && \
+		cd testing/functionality/v1alpha5 && \
+		gotestsum --format standard-verbose --junitfile $(CURDIR)/functests.xml -- -json -race -v -timeout 60m \
+		-cluster-version $(FUNCTEST_CLUSTER_VERSION) -cmk-cluster-configuration=standard \
+		-csi-image=$(CSI_IMAGE) \
+		-fail-on-skipped-csi-fs \
+		-run 'TestKubernetesSuite' -csi-tests=ssd,fs $(EXTRA_FUNCTEST_FLAGS) && \
+		cd ../../..
+
+.PHONY: functest-ci-cleanup
+functest-ci-cleanup: ## Releases the staging claim, whether or not the functests passed
+	@go run testing/functionality/cmd/slack_unclaim/main.go -service="crusoe-csi-driver" -timestamp=$(shell cat functest_slack_timestamp)
+
 .PHONY: build
 build: ## Builds the executable and places it in the build dir
 	@go build -o ${BUILDDIR}/${NAME} ${CSI_DRIVER_PKG}

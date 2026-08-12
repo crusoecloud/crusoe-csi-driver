@@ -39,6 +39,57 @@ build_and_push:
       -t "$RELEASE_IMAGE:${CI_COMMIT_REF_NAME##*/}" \
       --push .
 
+
+# Exercises this build of the driver on a real CMK cluster, the same suite region-coordinator and
+# kubernetes-manager gate on. Without -csi-image the suite tests whichever driver the cluster version
+# ships, which for this repo would mean gating a change on the released driver; -csi-image puts the
+# image built by build_and_push on the CSI workloads first.
+#
+# The pull secret uses CI_JOB_TOKEN, which is valid for the life of the job. The pods pull during the
+# job, so there is no need for a long-lived deploy token.
+functest:
+  stage: test
+  image: $CI_IMAGE:master
+  needs:
+    - job: build_and_push
+  before_script:
+    - go env -w "GOPRIVATE=${CI_SERVER_HOST}"
+    - echo -e "machine ${CI_SERVER_HOST} login gitlab-ci-token password ${CI_JOB_TOKEN}" > ~/.netrc
+  variables:
+    CI_API_ENDPOINT_ENV: "staging"
+    # No project or key mapping here. region-coordinator's staging functest references none of these,
+    # so CI_PROJECT_ID_CRUSOE_TEST_ACC and the access keys already resolve for the group and point at
+    # the staging functest project.
+    CI_PUB_SSH_KEY_CRUSOE_TEST_ACC: "$CI_PUB_SSH_KEY"
+    CI_PRIV_SSH_KEY_CRUSOE_TEST_ACC: "$CI_PRIV_SSH_KEY"
+    # 1.33 ships a driver new enough that the shared-volume tests run rather than gate-skip.
+    FUNCTEST_CLUSTER_VERSION: "1.33.4-cmk.24"
+    CSI_IMAGE_REGISTRY_USER: "gitlab-ci-token"
+    CSI_IMAGE_REGISTRY_PASSWORD: "$CI_JOB_TOKEN"
+  script:
+    # Derive the tag exactly as build_and_push does, off the same RELEASE_IMAGE, so this cannot drift
+    # from what was actually pushed. CI_COMMIT_REF_SLUG would not match: it rewrites the branch rather
+    # than stripping the prefix, so npujari/CRUSOE-1 becomes npujari-crusoe-1 instead of CRUSOE-1.
+    - make functest-ci CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
+  after_script:
+    - make functest-ci-cleanup
+  # Only one functest can hold the staging cluster at a time.
+  resource_group: functest-resource-group
+  artifacts:
+    when: always
+    paths:
+      - functests.xml
+    reports:
+      junit: functests.xml
+  rules:
+    # Automatic on release MRs, manual elsewhere: a run provisions a cluster and takes 30 to 45
+    # minutes, which is too slow to sit on every MR, but being able to trigger it on any MR is how
+    # you check a change before it reaches release.
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "release"'
+    - if: '$CI_MERGE_REQUEST_ID'
+      when: manual
+      allow_failure: true
+
 # Remove the tag_semver and pages jobs from merges into main.
 # The tag_semver job will be run using a GitHub action instead
 # and new versions will be pushed then.
