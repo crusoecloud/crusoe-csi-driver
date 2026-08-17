@@ -27,6 +27,10 @@ type Node struct {
 	PluginVersion     string
 	Capabilities      []*csi.NodeServiceCapability
 	MaxVolumesPerNode int64
+
+	// VolumeLocks serialises node operations per target path. Zero value is
+	// usable, so it needs no explicit initialisation. See node.VolumeLocks.
+	VolumeLocks node.VolumeLocks
 }
 
 func (d *Node) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (
@@ -52,6 +56,16 @@ func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolu
 	error,
 ) {
 	klog.Infof("Received request to publish volume: %+v", request)
+
+	// Serialise on the target path so a CO retry cannot run concurrently with
+	// the call it is retrying. See the fs node server for the full rationale.
+	targetPath := request.GetTargetPath()
+	if !d.VolumeLocks.TryAcquire(targetPath) {
+		klog.Warningf("operation already in progress for target path %s, returning Aborted", targetPath)
+
+		return nil, status.Errorf(codes.Aborted, node.VolumeOperationAlreadyExistsFmt, targetPath)
+	}
+	defer d.VolumeLocks.Release(targetPath)
 
 	var mountOpts []string
 
@@ -79,7 +93,16 @@ func (d *Node) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublish
 ) {
 	klog.Infof("Received request to unpublish volume: %+v", request)
 
+	// Same key as NodePublishVolume, so publish and unpublish for one target
+	// cannot interleave.
 	targetPath := request.GetTargetPath()
+	if !d.VolumeLocks.TryAcquire(targetPath) {
+		klog.Warningf("operation already in progress for target path %s, returning Aborted", targetPath)
+
+		return nil, status.Errorf(codes.Aborted, node.VolumeOperationAlreadyExistsFmt, targetPath)
+	}
+	defer d.VolumeLocks.Release(targetPath)
+
 	err := mount.CleanupMountPoint(targetPath, d.Mounter, false)
 	if err != nil {
 		klog.Errorf("failed to cleanup mount point for volume %s: %s", request.GetVolumeId(), err.Error())
