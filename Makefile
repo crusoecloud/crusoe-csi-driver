@@ -70,7 +70,7 @@ lint-ci: ## Verifies `golangci-lint` passes and outputs in CI-friendly format
 # Pin the testing repo tag: changes there can affect how these tests should be run here. Same
 # consumption pattern as region-coordinator, kubernetes-manager, and storms. Overridable so a run can
 # point at a testing branch before that work is tagged.
-FUNCTEST_VERSION ?= v0.0.414
+FUNCTEST_VERSION ?= v0.0.454
 GOTESTSUM_VERSION ?= v1.13.0
 
 .PHONY: functest-ci
