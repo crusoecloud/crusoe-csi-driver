@@ -73,6 +73,45 @@ lint-ci: ## Verifies `golangci-lint` passes and outputs in CI-friendly format
 FUNCTEST_VERSION ?= v0.0.454
 GOTESTSUM_VERSION ?= v1.13.0
 
+# Report every missing CI variable at once, before doing any work.
+#
+# The suite reads these from the environment and fails on the first one it happens to need, so a
+# missing set is discovered one 30-second job at a time. This lists all of them in a single run.
+# SLACK_* drive the staging claim, the CI_*_CRUSOE_TEST_ACC set is the functest project and its
+# credentials, and CSI_IMAGE is the driver build under test.
+FUNCTEST_REQUIRED_VARS = \
+	CI_API_ENDPOINT_ENV \
+	CI_PROJECT_ID_CRUSOE_TEST_ACC \
+	CI_ACCESS_KEY_CRUSOE_TEST_ACC \
+	CI_SECRET_KEY_CRUSOE_TEST_ACC \
+	CI_PUB_SSH_KEY_CRUSOE_TEST_ACC \
+	CI_PRIV_SSH_KEY_CRUSOE_TEST_ACC \
+	SLACK_TOKEN \
+	SLACK_STAGING_ALERTS_CHANNEL \
+	CSI_IMAGE
+
+.PHONY: functest-preflight
+functest-preflight: ## Fail with the full list of CI variables this job still needs
+	@echo "==> $@"
+	@missing=""; \
+	for v in $(FUNCTEST_REQUIRED_VARS); do \
+		eval "val=\$$$$v"; \
+		if [ -z "$$val" ]; then \
+			missing="$$missing $$v"; \
+			echo "  MISSING  $$v"; \
+		else \
+			echo "  set      $$v"; \
+		fi; \
+	done; \
+	if [ -n "$$missing" ]; then \
+		echo "" >&2; \
+		echo "FAIL: these CI variables are empty or unset:$$missing" >&2; \
+		echo "      They exist for region-coordinator and kubernetes-manager; this project needs them" >&2; \
+		echo "      too, either at group level or in its own CI settings. See CRUSOE-95943." >&2; \
+		exit 1; \
+	fi; \
+	echo "all required variables are present"
+
 .PHONY: functest-ci
 functest-ci: ## Runs the CSI storage tests from the testing repo against this build of the driver
 	@echo "==> $@"

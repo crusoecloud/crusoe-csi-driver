@@ -66,6 +66,10 @@ functest:
     # the staging functest project.
     CI_PUB_SSH_KEY_CRUSOE_TEST_ACC: "$CI_PUB_SSH_KEY"
     CI_PRIV_SSH_KEY_CRUSOE_TEST_ACC: "$CI_PRIV_SSH_KEY"
+    # slack_claim holds staging for the duration of the run and needs both of these. Mapped the way
+    # kubernetes-manager maps them, from the same source variables.
+    SLACK_TOKEN: "$FUNCTEST_STAGING_SLACK_TOKEN"
+    SLACK_STAGING_ALERTS_CHANNEL: "$K8s_ALERT_STAGING_CHANNEL_ID"
     # 1.33 ships a driver new enough that the shared-volume tests run rather than gate-skip.
     FUNCTEST_CLUSTER_VERSION: "1.33.4-cmk.24"
     CSI_IMAGE_REGISTRY_USER: "gitlab-ci-token"
@@ -74,6 +78,8 @@ functest:
     # Derive the tag exactly as build_and_push does, off the same RELEASE_IMAGE, so this cannot drift
     # from what was actually pushed. CI_COMMIT_REF_SLUG would not match: it rewrites the branch rather
     # than stripping the prefix, so npujari/CRUSOE-1 becomes npujari-crusoe-1 instead of CRUSOE-1.
+    # Report every missing variable at once rather than one failed job per variable.
+    - make functest-preflight CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
     - make functest-ci CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
   after_script:
     - make functest-ci-cleanup
