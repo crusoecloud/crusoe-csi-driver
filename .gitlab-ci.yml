@@ -8,6 +8,10 @@ default:
 
 variables:
   CI_IMAGE: registry.gitlab.com/crusoeenergy/tools/go-ci-1.24
+  # The functest job runs on a newer Go than the rest of this repo. The testing repo declares
+  # go 1.25.6, and GOTOOLCHAIN=local in the CI images means a 1.24 image refuses to build it rather
+  # than fetching a toolchain. Overriding only this job leaves the driver's own build on 1.24.
+  FUNCTEST_CI_IMAGE: registry.gitlab.com/crusoeenergy/tools/go-ci-1.25
 
 test_and_lint:
   rules:
@@ -49,7 +53,7 @@ build_and_push:
 # job, so there is no need for a long-lived deploy token.
 functest:
   stage: test
-  image: $CI_IMAGE:master
+  image: $FUNCTEST_CI_IMAGE:master
   needs:
     - job: build_and_push
   before_script:

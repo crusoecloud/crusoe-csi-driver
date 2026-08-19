@@ -90,7 +90,19 @@ functest-ci: ## Runs the CSI storage tests from the testing repo against this bu
 
 .PHONY: functest-ci-cleanup
 functest-ci-cleanup: ## Releases the staging claim, whether or not the functests passed
-	@go run testing/functionality/cmd/slack_unclaim/main.go -service="crusoe-csi-driver" -timestamp=$(shell cat functest_slack_timestamp)
+	@echo "==> $@"
+# Runs from after_script, so it also runs when setup failed before the claim was taken. Without these
+# guards it fails on a missing timestamp file and buries the real error under its own.
+	@if [ ! -f functest_slack_timestamp ]; then \
+		echo "no staging claim was taken, nothing to release"; \
+		exit 0; \
+	fi; \
+	if [ ! -f testing/functionality/cmd/slack_unclaim/main.go ]; then \
+		echo "testing repo was never cloned, cannot release the claim; check the job log above" >&2; \
+		exit 0; \
+	fi; \
+	go run testing/functionality/cmd/slack_unclaim/main.go -service="crusoe-csi-driver" \
+		-timestamp="$$(cat functest_slack_timestamp)"
 
 .PHONY: build
 build: ## Builds the executable and places it in the build dir
