@@ -77,8 +77,24 @@ GOTESTSUM_VERSION ?= v1.13.0
 #
 # The suite reads these from the environment and fails on the first one it happens to need, so a
 # missing set is discovered one 30-second job at a time. This lists all of them in a single run.
-# SLACK_* drive the staging claim, the CI_*_CRUSOE_TEST_ACC set is the functest project and its
-# credentials, and CSI_IMAGE is the driver build under test.
+#
+# What each is for, and why none can be dropped:
+#
+#   CI_PROJECT_ID_CRUSOE_TEST_ACC   the Crusoe project the tests create clusters and disks in
+#   CI_{ACCESS,SECRET}_KEY_...      that project's API credentials
+#   CI_{PUB,PRIV}_SSH_KEY_...       injected into test VMs so the suite can SSH in. The CSI tests
+#                                   never SSH anywhere, but internal/configs/setFromCIVars errors
+#                                   when either is empty, and parses the private key at startup, so
+#                                   the suite will not boot without them. The private key is
+#                                   base64-encoded (StdEncoding).
+#   SLACK_TOKEN                     posts the staging claim. resource_group only serialises within
+#   SLACK_STAGING_ALERTS_CHANNEL    one GitLab project, so the Slack claim is the only mutex that
+#                                   stops this run colliding with region-coordinator's.
+#   CSI_IMAGE                       the driver build under test, derived by the job
+#
+# Values live in 1Password under cloud-compute-devs+region-testing@crusoeenergy.com, per the comment
+# on internal/configs/setFromCIVars in the testing repo. They are set by hand per GitLab project,
+# not group-inherited and not in Terraform, which is why a new consumer starts with none of them.
 FUNCTEST_REQUIRED_VARS = \
 	CI_API_ENDPOINT_ENV \
 	CI_PROJECT_ID_CRUSOE_TEST_ACC \
@@ -106,8 +122,9 @@ functest-preflight: ## Fail with the full list of CI variables this job still ne
 	if [ -n "$$missing" ]; then \
 		echo "" >&2; \
 		echo "FAIL: these CI variables are empty or unset:$$missing" >&2; \
-		echo "      They exist for region-coordinator and kubernetes-manager; this project needs them" >&2; \
-		echo "      too, either at group level or in its own CI settings. See CRUSOE-95943." >&2; \
+		echo "      Set them in this project's CI settings; they are not group-inherited." >&2; \
+		echo "      Values: 1Password, cloud-compute-devs+region-testing@crusoeenergy.com." >&2; \
+		echo "      The private SSH key must be base64-encoded. See CRUSOE-95943." >&2; \
 		exit 1; \
 	fi; \
 	echo "all required variables are present"
