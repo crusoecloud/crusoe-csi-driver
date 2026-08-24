@@ -95,10 +95,14 @@ functest:
     reports:
       junit: functests.xml
   rules:
-    # Automatic on release MRs, manual elsewhere: a run provisions a cluster and takes 30 to 45
-    # minutes, which is too slow to sit on every MR, but being able to trigger it on any MR is how
-    # you check a change before it reaches release.
-    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "release"'
+    # Automatic and blocking on MRs to the default branch, which is the only long-lived branch in
+    # this repo, so it is the point where a change reaches everyone. A run provisions a cluster and
+    # takes 30 to 45 minutes. That cost is affordable here because changes are infrequent and come
+    # from one maintainer; region-coordinator and kubernetes-manager take continuous changes from
+    # several teams, which is why they gate a promotion branch instead of their trunk.
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
+      changes: !reference [.code-changes, changes]
+    # An MR stacked onto another feature branch gets an on-demand run instead.
     - if: '$CI_MERGE_REQUEST_ID'
       when: manual
       allow_failure: true
