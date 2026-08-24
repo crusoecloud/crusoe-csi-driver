@@ -36,17 +36,24 @@ const (
 
 type Node struct {
 	csi.UnimplementedNodeServer
-	CrusoeClient      *crusoeapi.APIClient
-	CrusoeHTTPClient  *http.Client
-	HostInstance      *crusoeapi.InstanceV1Alpha5
-	Mounter           *mount.SafeFormatAndMount
-	Resizer           *mount.ResizeFs
+	CrusoeClient     *crusoeapi.APIClient
+	CrusoeHTTPClient *http.Client
+	HostInstance     *crusoeapi.InstanceV1Alpha5
+	Mounter          *mount.SafeFormatAndMount
+	Resizer          *mount.ResizeFs
+
+	// VolumeLocks serialises node operations per target path. Zero value is
+	// usable, so it needs no explicit initialisation. See node.VolumeLocks.
+	// Placed with the pointer-bearing fields: govet fieldalignment wants them
+	// contiguous, and sync.Map inside it carries pointers.
+	VolumeLocks node.VolumeLocks
+
 	CrusoeAPIEndpoint string
-	NFSRemotePorts    string
 	NFSHost           string
 	DiskType          common.DiskType
 	PluginName        string
 	PluginVersion     string
+	NFSRemotePorts    string
 	Capabilities      []*csi.NodeServiceCapability
 	MaxVolumesPerNode int64
 }
@@ -74,6 +81,25 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 	error,
 ) {
 	klog.Infof("Received request to publish volume: %+v", request)
+
+	// Serialise on the target path, not the volume ID. A shared-FS volume is
+	// published to a separate target path per pod and the CSI spec allows those
+	// calls to run concurrently, so locking per volume would refuse legitimate
+	// work. Locking per target closes the actual race: kubelet re-drives
+	// NodePublishVolume for the same target when its deadline expires, and two
+	// concurrent calls both passed the already-mounted check and both mounted,
+	// leaving the second to fail EBUSY from mount(2).
+	//
+	// csi-driver-nfs keys the same lock on volumeID + "-" + targetPath. The
+	// target path already carries the PV name, which is one to one with a volume,
+	// so both keys partition the same way and the prefix adds nothing here.
+	targetPath := request.GetTargetPath()
+	if !d.VolumeLocks.TryAcquire(targetPath) {
+		klog.Warningf("operation already in progress for target path %s, returning Aborted", targetPath)
+
+		return nil, status.Errorf(codes.Aborted, node.VolumeOperationAlreadyExistsFmt, targetPath)
+	}
+	defer d.VolumeLocks.Release(targetPath)
 
 	nfsEnabled, err := crusoe.GetNFSFlag(ctx, d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
 	if err != nil {
@@ -247,7 +273,17 @@ func (d *Node) NodeUnpublishVolume(_ context.Context, request *csi.NodeUnpublish
 ) {
 	klog.Infof("Received request to unpublish volume: %+v", request)
 
+	// Same key as NodePublishVolume, so publish and unpublish for one target
+	// cannot interleave. Without this an unpublish can tear down a mount a
+	// concurrent publish just completed.
 	targetPath := request.GetTargetPath()
+	if !d.VolumeLocks.TryAcquire(targetPath) {
+		klog.Warningf("operation already in progress for target path %s, returning Aborted", targetPath)
+
+		return nil, status.Errorf(codes.Aborted, node.VolumeOperationAlreadyExistsFmt, targetPath)
+	}
+	defer d.VolumeLocks.Release(targetPath)
+
 	err := mount.CleanupMountPoint(targetPath, d.Mounter, false)
 	if err != nil {
 		klog.Errorf("failed to cleanup mount point for volume %s: %s", request.GetVolumeId(), err.Error())
