@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/node"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/node/fs"
 	"k8s.io/mount-utils"
@@ -57,39 +56,14 @@ func (m *mockMounter) GetMountRefs(_ string) ([]string, error) {
 	return nil, nil
 }
 
-func TestPublishFilesystem_Publish_NFSVolume(t *testing.T) {
+func TestStageMount_NFSVolume(t *testing.T) {
 	t.Parallel()
 	mockMnt := &mockMounter{}
-	mounter := &mount.SafeFormatAndMount{
-		Interface: mockMnt,
-	}
+	mounter := &mount.SafeFormatAndMount{Interface: mockMnt}
 
-	targetPath := t.TempDir()
-
-	volumeCapability := &csi.VolumeCapability{
-		AccessType: &csi.VolumeCapability_Mount{
-			Mount: &csi.VolumeCapability_MountVolume{
-				MountFlags: []string{"ro"},
-			},
-		},
-	}
-
-	request := &csi.NodePublishVolumeRequest{
-		VolumeId:         "test-volume-id",
-		TargetPath:       targetPath,
-		VolumeCapability: volumeCapability,
-	}
-
-	publisher := &fs.PublishFilesystem{
-		Mounter:        mounter,
-		Request:        request,
-		DevicePath:     "nfs.example.com:/volumes/test-volume-id",
-		NFSRemotePorts: "2049-2050",
-		MountOpts:      []string{"defaults"},
-		NFSEnabled:     true,
-	}
-
-	err := publisher.Publish()
+	staging := t.TempDir()
+	err := fs.StageMountForTest(
+		mounter, true, "2049-2050", "nfs.example.com:/volumes/test-volume-id", staging, []string{"defaults", "ro"})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -102,208 +76,82 @@ func TestPublishFilesystem_Publish_NFSVolume(t *testing.T) {
 	if call.source != "nfs.example.com:/volumes/test-volume-id" {
 		t.Errorf("expected source 'nfs.example.com:/volumes/test-volume-id', got '%s'", call.source)
 	}
-
+	if call.target != staging {
+		t.Errorf("expected target to be the staging path %q, got %q", staging, call.target)
+	}
 	if call.fstype != "nfs" {
 		t.Errorf("expected fstype 'nfs', got '%s'", call.fstype)
 	}
 
-	// Check that NFS mount options are present
 	expectedOptions := []string{
 		"defaults", "ro", "vers=3", "nconnect=16", "spread_reads", "spread_writes", "remoteports=2049-2050",
 	}
-	if len(call.options) != len(expectedOptions) {
-		t.Errorf("expected %d mount options, got %d: %v", len(expectedOptions), len(call.options), call.options)
-	}
-
-	// Verify all expected options are present
-	optionsMap := make(map[string]bool)
-	for _, opt := range call.options {
-		optionsMap[opt] = true
-	}
-	for _, expected := range expectedOptions {
-		if !optionsMap[expected] {
-			t.Errorf("expected mount option '%s' not found in %v", expected, call.options)
-		}
-	}
+	assertOptionsEqual(t, expectedOptions, call.options)
 }
 
-func TestPublishFilesystem_Publish_NFSVolumeWithDNS(t *testing.T) {
+func TestStageMount_NFSVolumeWithDNS(t *testing.T) {
 	t.Parallel()
 	mockMnt := &mockMounter{}
-	mounter := &mount.SafeFormatAndMount{
-		Interface: mockMnt,
-	}
+	mounter := &mount.SafeFormatAndMount{Interface: mockMnt}
 
-	targetPath := t.TempDir()
-
-	volumeCapability := &csi.VolumeCapability{
-		AccessType: &csi.VolumeCapability_Mount{
-			Mount: &csi.VolumeCapability_MountVolume{
-				MountFlags: []string{},
-			},
-		},
-	}
-
-	request := &csi.NodePublishVolumeRequest{
-		VolumeId:         "test-volume-id",
-		TargetPath:       targetPath,
-		VolumeCapability: volumeCapability,
-	}
-
-	publisher := &fs.PublishFilesystem{
-		Mounter:        mounter,
-		Request:        request,
-		DevicePath:     "nfs.crusoecloudcompute.com:/volumes/test-volume-id",
-		NFSRemotePorts: "dns", // DNS for ICAT locations
-		MountOpts:      []string{},
-		NFSEnabled:     true,
-	}
-
-	err := publisher.Publish()
+	err := fs.StageMountForTest(
+		mounter, true, "dns", "nfs.crusoecloudcompute.com:/volumes/test-volume-id", t.TempDir(), []string{})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	if len(mockMnt.mountCalls) != 1 {
-		t.Fatalf("expected 1 mount call, got %d", len(mockMnt.mountCalls))
 	}
 
 	call := mockMnt.mountCalls[0]
 	if call.source != "nfs.crusoecloudcompute.com:/volumes/test-volume-id" {
 		t.Errorf("expected source 'nfs.crusoecloudcompute.com:/volumes/test-volume-id', got '%s'", call.source)
 	}
-
 	if call.fstype != "nfs" {
 		t.Errorf("expected fstype 'nfs', got '%s'", call.fstype)
 	}
 
-	// Check that NFS mount options include remoteports=dns
 	expectedOptions := []string{"vers=3", "nconnect=16", "spread_reads", "spread_writes", "remoteports=dns"}
-	if len(call.options) != len(expectedOptions) {
-		t.Errorf("expected %d mount options, got %d: %v", len(expectedOptions), len(call.options), call.options)
-	}
-
-	// Verify remoteports=dns is present
-	foundRemotePorts := false
-	for _, opt := range call.options {
-		if opt == "remoteports=dns" {
-			foundRemotePorts = true
-
-			break
-		}
-	}
-	if !foundRemotePorts {
-		t.Errorf("expected remoteports=dns option, got: %v", call.options)
-	}
+	assertOptionsEqual(t, expectedOptions, call.options)
 }
 
-func TestPublishFilesystem_Publish_NFSVolumeNoRemotePorts(t *testing.T) {
+func TestStageMount_NFSVolumeNoRemotePorts(t *testing.T) {
 	t.Parallel()
 	mockMnt := &mockMounter{}
-	mounter := &mount.SafeFormatAndMount{
-		Interface: mockMnt,
-	}
+	mounter := &mount.SafeFormatAndMount{Interface: mockMnt}
 
-	targetPath := t.TempDir()
-
-	volumeCapability := &csi.VolumeCapability{
-		AccessType: &csi.VolumeCapability_Mount{
-			Mount: &csi.VolumeCapability_MountVolume{
-				MountFlags: []string{},
-			},
-		},
-	}
-
-	request := &csi.NodePublishVolumeRequest{
-		VolumeId:         "test-volume-id",
-		TargetPath:       targetPath,
-		VolumeCapability: volumeCapability,
-	}
-
-	publisher := &fs.PublishFilesystem{
-		Mounter:        mounter,
-		Request:        request,
-		DevicePath:     "nfs.example.com:/volumes/test-volume-id",
-		NFSRemotePorts: "", // Empty - no remoteports option should be added
-		MountOpts:      []string{},
-		NFSEnabled:     true,
-	}
-
-	err := publisher.Publish()
+	err := fs.StageMountForTest(
+		mounter, true, "", "nfs.example.com:/volumes/test-volume-id", t.TempDir(), []string{})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	if len(mockMnt.mountCalls) != 1 {
-		t.Fatalf("expected 1 mount call, got %d", len(mockMnt.mountCalls))
 	}
 
 	call := mockMnt.mountCalls[0]
-
-	// Check that NFS mount options do NOT include remoteports when empty
 	expectedOptions := []string{"vers=3", "nconnect=16", "spread_reads", "spread_writes"}
-	if len(call.options) != len(expectedOptions) {
-		t.Errorf("expected %d mount options, got %d: %v", len(expectedOptions), len(call.options), call.options)
-	}
+	assertOptionsEqual(t, expectedOptions, call.options)
 
-	// Verify remoteports is not present
 	for _, opt := range call.options {
 		if len(opt) >= 11 && opt[:11] == "remoteports" {
-			t.Errorf("remoteports option should not be present when NFSRemotePorts is empty, got: %v", call.options)
+			t.Errorf("remoteports option should not be present when empty, got: %v", call.options)
 		}
 	}
 }
 
-func TestPublishFilesystem_Publish_VirtioFSVolume(t *testing.T) {
+func TestStageMount_VirtioFSVolume(t *testing.T) {
 	t.Parallel()
 	mockMnt := &mockMounter{}
-	mounter := &mount.SafeFormatAndMount{
-		Interface: mockMnt,
-	}
+	mounter := &mount.SafeFormatAndMount{Interface: mockMnt}
 
-	targetPath := t.TempDir()
-
-	volumeCapability := &csi.VolumeCapability{
-		AccessType: &csi.VolumeCapability_Mount{
-			Mount: &csi.VolumeCapability_MountVolume{
-				MountFlags: []string{"rw"},
-			},
-		},
-	}
-
-	request := &csi.NodePublishVolumeRequest{
-		VolumeId:         "test-volume-id",
-		TargetPath:       targetPath,
-		VolumeCapability: volumeCapability,
-	}
-
-	publisher := &fs.PublishFilesystem{
-		Mounter:    mounter,
-		Request:    request,
-		DevicePath: "test-disk-name",
-		MountOpts:  []string{"defaults"},
-		NFSEnabled: false, // VirtioFS
-	}
-
-	err := publisher.Publish()
+	err := fs.StageMountForTest(mounter, false, "", "test-disk-name", t.TempDir(), []string{"defaults", "rw"})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	if len(mockMnt.mountCalls) != 1 {
-		t.Fatalf("expected 1 mount call, got %d", len(mockMnt.mountCalls))
 	}
 
 	call := mockMnt.mountCalls[0]
 	if call.source != "test-disk-name" {
 		t.Errorf("expected source 'test-disk-name', got '%s'", call.source)
 	}
-
 	if call.fstype != "virtiofs" {
 		t.Errorf("expected fstype 'virtiofs', got '%s'", call.fstype)
 	}
 
-	// Check that mount options do not include NFS-specific options
 	for _, opt := range call.options {
 		if opt == "vers=3" || opt == "nconnect=16" {
 			t.Errorf("VirtioFS mount should not have NFS options, got: %v", call.options)
@@ -311,105 +159,121 @@ func TestPublishFilesystem_Publish_VirtioFSVolume(t *testing.T) {
 	}
 }
 
-func TestPublishFilesystem_Publish_MountError(t *testing.T) {
+func TestStageMount_MountError(t *testing.T) {
 	t.Parallel()
+	mockMnt := &mockMounter{mountError: errMockMount}
+	mounter := &mount.SafeFormatAndMount{Interface: mockMnt}
 
-	mockMnt := &mockMounter{
-		mountError: errMockMount,
-	}
-	mounter := &mount.SafeFormatAndMount{
-		Interface: mockMnt,
-	}
-
-	targetPath := t.TempDir()
-
-	volumeCapability := &csi.VolumeCapability{
-		AccessType: &csi.VolumeCapability_Mount{
-			Mount: &csi.VolumeCapability_MountVolume{
-				MountFlags: []string{},
-			},
-		},
-	}
-
-	request := &csi.NodePublishVolumeRequest{
-		VolumeId:         "test-volume-id",
-		TargetPath:       targetPath,
-		VolumeCapability: volumeCapability,
-	}
-
-	publisher := &fs.PublishFilesystem{
-		Mounter:    mounter,
-		Request:    request,
-		DevicePath: "test-disk",
-		MountOpts:  []string{},
-		NFSEnabled: false,
-	}
-
-	err := publisher.Publish()
+	err := fs.StageMountForTest(mounter, false, "", "test-disk", t.TempDir(), []string{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-
 	if !errors.Is(err, node.ErrFailedMount) {
 		t.Errorf("expected error to wrap ErrFailedMount, got: %v", err)
 	}
 }
 
-func TestPublishFilesystem_Publish_CustomMountOptions(t *testing.T) {
+func TestStageMount_CustomMountOptions(t *testing.T) {
 	t.Parallel()
 	mockMnt := &mockMounter{}
-	mounter := &mount.SafeFormatAndMount{
-		Interface: mockMnt,
-	}
+	mounter := &mount.SafeFormatAndMount{Interface: mockMnt}
 
-	targetPath := t.TempDir()
-
-	volumeCapability := &csi.VolumeCapability{
-		AccessType: &csi.VolumeCapability_Mount{
-			Mount: &csi.VolumeCapability_MountVolume{
-				MountFlags: []string{"noatime", "nodiratime"},
-			},
-		},
-	}
-
-	request := &csi.NodePublishVolumeRequest{
-		VolumeId:         "test-volume-id",
-		TargetPath:       targetPath,
-		VolumeCapability: volumeCapability,
-	}
-
-	publisher := &fs.PublishFilesystem{
-		Mounter:    mounter,
-		Request:    request,
-		DevicePath: "test-disk",
-		MountOpts:  []string{"defaults", "ro"},
-		NFSEnabled: false,
-	}
-
-	err := publisher.Publish()
+	err := fs.StageMountForTest(
+		mounter, false, "", "test-disk", t.TempDir(), []string{"defaults", "ro", "noatime", "nodiratime"})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
 	call := mockMnt.mountCalls[0]
-
-	// Verify all custom mount options are present
-	expectedOpts := map[string]bool{
-		"defaults":   false,
-		"ro":         false,
-		"noatime":    false,
-		"nodiratime": false,
-	}
-
+	expectedOpts := map[string]bool{"defaults": false, "ro": false, "noatime": false, "nodiratime": false}
 	for _, opt := range call.options {
 		if _, exists := expectedOpts[opt]; exists {
 			expectedOpts[opt] = true
 		}
 	}
-
 	for opt, found := range expectedOpts {
 		if !found {
 			t.Errorf("expected mount option '%s' not found in %v", opt, call.options)
 		}
 	}
+}
+
+func TestBindMount(t *testing.T) {
+	t.Parallel()
+	mockMnt := &mockMounter{}
+	mounter := &mount.SafeFormatAndMount{Interface: mockMnt}
+
+	staging := t.TempDir()
+	err := fs.BindMountForTest(mounter, staging, t.TempDir(), false, nil)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(mockMnt.mountCalls) != 1 {
+		t.Fatalf("expected 1 bind mount call, got %d", len(mockMnt.mountCalls))
+	}
+
+	call := mockMnt.mountCalls[0]
+	if call.source != staging {
+		t.Errorf("expected bind source to be the staging path %q, got %q", staging, call.source)
+	}
+	if call.fstype != "" {
+		t.Errorf("expected empty fstype for a bind, got %q", call.fstype)
+	}
+	if !containsOption(call.options, "bind") {
+		t.Errorf("expected 'bind' option, got: %v", call.options)
+	}
+}
+
+func TestBindMount_ReadonlyRemount(t *testing.T) {
+	t.Parallel()
+	mockMnt := &mockMounter{}
+	mounter := &mount.SafeFormatAndMount{Interface: mockMnt}
+
+	err := fs.BindMountForTest(mounter, t.TempDir(), t.TempDir(), true, nil)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// A readonly bind needs the initial bind plus a remount to enforce ro.
+	if len(mockMnt.mountCalls) != 2 {
+		t.Fatalf("expected 2 mount calls (bind + ro remount), got %d", len(mockMnt.mountCalls))
+	}
+	if !containsOption(mockMnt.mountCalls[0].options, node.ReadOnlyMountOption) {
+		t.Errorf("expected initial bind to carry ro, got: %v", mockMnt.mountCalls[0].options)
+	}
+	remount := mockMnt.mountCalls[1].options
+	for _, want := range []string{"bind", "remount", node.ReadOnlyMountOption} {
+		if !containsOption(remount, want) {
+			t.Errorf("expected remount option %q, got: %v", want, remount)
+		}
+	}
+}
+
+func assertOptionsEqual(t *testing.T, expected, got []string) {
+	t.Helper()
+
+	if len(got) != len(expected) {
+		t.Errorf("expected %d mount options, got %d: %v", len(expected), len(got), got)
+	}
+
+	present := make(map[string]bool, len(got))
+	for _, opt := range got {
+		present[opt] = true
+	}
+	for _, want := range expected {
+		if !present[want] {
+			t.Errorf("expected mount option '%s' not found in %v", want, got)
+		}
+	}
+}
+
+func containsOption(options []string, want string) bool {
+	for _, opt := range options {
+		if opt == want {
+			return true
+		}
+	}
+
+	return false
 }

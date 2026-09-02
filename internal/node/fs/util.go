@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/container-storage-interface/spec/lib/go/csi"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/node"
@@ -53,12 +52,11 @@ func supportsFS(instance *crusoeapi.InstanceV1Alpha5) bool {
 	return true
 }
 
-func getFSDevicePath(request *csi.NodePublishVolumeRequest, supportsNfs bool, nfsIP string) (string, error) {
+func getFSDevicePath(volumeID string, volumeContext map[string]string, supportsNfs bool, nfsIP string) (string, error) {
 	switch {
 	case supportsNfs:
-		return fmt.Sprintf("%s:/volumes/%s", nfsIP, request.GetVolumeId()), nil
+		return fmt.Sprintf("%s:/volumes/%s", nfsIP, volumeID), nil
 	default:
-		volumeContext := request.GetVolumeContext()
 		devicePath, ok := volumeContext[common.VolumeContextDiskNameKey]
 		if !ok {
 			return "", node.ErrVolumeMissingName

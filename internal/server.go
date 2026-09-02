@@ -84,6 +84,13 @@ func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alp
 		}
 	case common.DiskTypeFS:
 		maxVolumesPerNode = common.MaxFSVolumesPerNode
+		// The fs node server stages the NFS export once per node and bind-mounts it
+		// into each pod, so it advertises STAGE_UNSTAGE_VOLUME on top of the shared
+		// base. Build a fresh slice: BaseNodeCapabilities is shared with the ssd
+		// server, which does not implement stage, so it must not be mutated here.
+		fsCapabilities := make([]*csi.NodeServiceCapability, 0, len(capabilities)+1)
+		fsCapabilities = append(fsCapabilities, capabilities...)
+		fsCapabilities = append(fsCapabilities, &common.NodeCapabilityStageUnstageVolume)
 		nodeServer = &fs.Node{
 			CrusoeClient:      newCrusoeClientWithViperConfig(),
 			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
@@ -96,7 +103,7 @@ func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alp
 			PluginName:        common.PluginName,
 			PluginVersion:     common.PluginVersion,
 			HostInstance:      hostInstance,
-			Capabilities:      capabilities,
+			Capabilities:      fsCapabilities,
 			MaxVolumesPerNode: maxVolumesPerNode,
 		}
 	default:

@@ -58,37 +58,116 @@ type Node struct {
 	MaxVolumesPerNode int64
 }
 
-func (d *Node) NodeStageVolume(_ context.Context, _ *csi.NodeStageVolumeRequest) (
+// NodeStageVolume mounts the export once per node at the staging target path. The
+// CO (kubelet) calls this once per volume per node before any NodePublishVolume,
+// and reference-counts it, so pod restarts bind/unbind (NodePublish/NodeUnpublish)
+// against a mount that persists rather than re-mounting the export each time.
+func (d *Node) NodeStageVolume(ctx context.Context, request *csi.NodeStageVolumeRequest) (
 	*csi.NodeStageVolumeResponse,
 	error,
 ) {
-	klog.Errorf("%s: NodeStageVolume", common.ErrNotImplemented)
+	klog.Infof("Received request to stage volume: %+v", request)
 
-	return nil, status.Errorf(codes.Unimplemented, "%s: NodeStageVolume", common.ErrNotImplemented)
+	stagingTargetPath := request.GetStagingTargetPath()
+	if stagingTargetPath == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "%s: NodeStageVolume", node.ErrVolumePathEmpty)
+	}
+
+	// Serialise on the staging target path. kubelet re-drives NodeStageVolume when
+	// its deadline expires, and two pods first landing on a node both drive the
+	// device mount, so two concurrent mount(2) calls for one staging path can both
+	// pass the already-mounted check and collide with EBUSY. This is the same race
+	// CRUSOE-97438 closed for NodePublishVolume, moved to the staging key.
+	if !d.VolumeLocks.TryAcquire(stagingTargetPath) {
+		klog.Warningf("operation already in progress for staging target path %s, returning Aborted", stagingTargetPath)
+
+		return nil, status.Errorf(codes.Aborted, node.VolumeOperationAlreadyExistsFmt, stagingTargetPath)
+	}
+	defer d.VolumeLocks.Release(stagingTargetPath)
+
+	nfsEnabled, err := crusoe.GetNFSFlag(ctx, d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
+	if err != nil {
+		klog.Errorf("%s: %s", node.ErrFailedToFetchNFSFlag, err)
+
+		return nil, status.Errorf(codes.Internal, "%s: %s", node.ErrFailedToFetchNFSFlag, err)
+	}
+	klog.Infof("NFS enabled: %v", nfsEnabled)
+
+	nfsHost, nfsRemotePorts := d.resolveNFSTarget(ctx, request.GetVolumeId(), nfsEnabled)
+
+	err = nodeStageVolume(d.Mounter, nfsEnabled, nfsRemotePorts, nfsHost, request)
+	if err != nil {
+		klog.Errorf("failed to stage volume %s: %s", request.GetVolumeId(), err.Error())
+
+		return nil, status.Errorf(codes.Internal, "failed to stage volume %s: %s", request.GetVolumeId(), err.Error())
+	}
+
+	klog.Infof("Successfully staged volume: %s", request.GetVolumeId())
+
+	return &csi.NodeStageVolumeResponse{}, nil
 }
 
-func (d *Node) NodeUnstageVolume(_ context.Context, _ *csi.NodeUnstageVolumeRequest) (
+// NodeUnstageVolume unmounts the per-node staging mount. The CO calls this only
+// after every NodeUnpublishVolume for the volume on the node has returned success,
+// i.e. when no pod on the node uses the volume, so this is the rare, real umount /
+// superblock teardown, with nothing queued behind it.
+func (d *Node) NodeUnstageVolume(_ context.Context, request *csi.NodeUnstageVolumeRequest) (
 	*csi.NodeUnstageVolumeResponse,
 	error,
 ) {
-	klog.Errorf("%s: NodeUnstageVolume", common.ErrNotImplemented)
+	klog.Infof("Received request to unstage volume: %+v", request)
 
-	return nil, status.Errorf(codes.Unimplemented, "%s: NodeUnstageVolume", common.ErrNotImplemented)
+	stagingTargetPath := request.GetStagingTargetPath()
+	if stagingTargetPath == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "%s: NodeUnstageVolume", node.ErrVolumePathEmpty)
+	}
+
+	// Same key as NodeStageVolume, so stage and unstage for one staging path cannot
+	// interleave.
+	if !d.VolumeLocks.TryAcquire(stagingTargetPath) {
+		klog.Warningf("operation already in progress for staging target path %s, returning Aborted", stagingTargetPath)
+
+		return nil, status.Errorf(codes.Aborted, node.VolumeOperationAlreadyExistsFmt, stagingTargetPath)
+	}
+	defer d.VolumeLocks.Release(stagingTargetPath)
+
+	// CleanupMountPoint is a noop when nothing is mounted, so unstage is idempotent.
+	err := mount.CleanupMountPoint(stagingTargetPath, d.Mounter, false)
+	if err != nil {
+		klog.Errorf("failed to unstage volume %s: %s", request.GetVolumeId(), err.Error())
+
+		return nil, status.Errorf(codes.Internal, "failed to unstage volume %s: %s",
+			request.GetVolumeId(), err.Error())
+	}
+
+	klog.Infof("Successfully unstaged volume: %s", request.GetVolumeId())
+
+	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
-func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVolumeRequest) (
+// NodePublishVolume bind-mounts the already-staged volume into the pod's target
+// path. The expensive export mount happens once in NodeStageVolume; publish is a
+// cheap bind, so a pod restart is unbind + rebind against a mount that stays put.
+func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolumeRequest) (
 	*csi.NodePublishVolumeResponse,
 	error,
 ) {
 	klog.Infof("Received request to publish volume: %+v", request)
 
+	// With STAGE_UNSTAGE_VOLUME advertised the CO must call NodeStageVolume first,
+	// so a publish without a staging path is a CO/programmer error, not something
+	// to paper over by re-mounting the export here.
+	if request.GetStagingTargetPath() == "" {
+		return nil, status.Errorf(codes.FailedPrecondition,
+			"staging target path must be provided; NodeStageVolume must run before NodePublishVolume")
+	}
+
 	// Serialise on the target path, not the volume ID. A shared-FS volume is
 	// published to a separate target path per pod and the CSI spec allows those
 	// calls to run concurrently, so locking per volume would refuse legitimate
 	// work. Locking per target closes the actual race: kubelet re-drives
-	// NodePublishVolume for the same target when its deadline expires, and two
-	// concurrent calls both passed the already-mounted check and both mounted,
-	// leaving the second to fail EBUSY from mount(2).
+	// NodePublishVolume for the same target when its deadline expires. The bind is
+	// cheap now, but the guard is kept because the re-drive still happens.
 	//
 	// csi-driver-nfs keys the same lock on volumeID + "-" + targetPath. The
 	// target path already carries the PV name, which is one to one with a volume,
@@ -101,24 +180,7 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 	}
 	defer d.VolumeLocks.Release(targetPath)
 
-	nfsEnabled, err := crusoe.GetNFSFlag(ctx, d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
-	if err != nil {
-		klog.Errorf("%s: %s", node.ErrFailedToFetchNFSFlag, err)
-
-		return nil, status.Errorf(codes.Internal, "%s: %s", node.ErrFailedToFetchNFSFlag, err)
-	}
-	klog.Infof("NFS enabled: %v", nfsEnabled)
-
-	var mountOpts []string
-
-	if request.GetReadonly() {
-		// Read-only volumes cannot be written to in any way
-		mountOpts = append(mountOpts, node.ReadOnlyMountOption)
-	}
-
-	nfsHost, nfsRemotePorts := d.resolveNFSTarget(ctx, request.GetVolumeId(), nfsEnabled)
-
-	err = nodePublishVolume(d.Mounter, d.Resizer, mountOpts, nfsEnabled, nfsRemotePorts, nfsHost, request)
+	err := nodePublishVolumeBind(d.Mounter, request)
 	if err != nil {
 		klog.Errorf("failed to publish volume %s: %s", request.GetVolumeId(), err.Error())
 

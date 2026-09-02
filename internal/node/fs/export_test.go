@@ -9,7 +9,33 @@ package fs
 import (
 	"context"
 	"net"
+
+	"k8s.io/mount-utils"
 )
+
+// StageMountForTest exposes the package-private stageMount (option assembly + the
+// real per-node mount, without the platform-specific already-mounted pre-check) so
+// the fs_test package can assert the assembled mount options with a mock mounter.
+func StageMountForTest(
+	mounter *mount.SafeFormatAndMount,
+	nfsEnabled bool,
+	nfsRemotePorts, devicePath, stagingTargetPath string,
+	mountFlags []string,
+) error {
+	return stageMount(mounter, nfsEnabled, nfsRemotePorts, devicePath, stagingTargetPath, mountFlags)
+}
+
+// BindMountForTest exposes the package-private bindMount (the per-pod bind, without
+// the platform-specific mount-point pre-check) so the fs_test package can assert
+// the bind options with a mock mounter.
+func BindMountForTest(
+	mounter *mount.SafeFormatAndMount,
+	stagingTargetPath, targetPath string,
+	readonly bool,
+	mountFlags []string,
+) error {
+	return bindMount(mounter, stagingTargetPath, targetPath, readonly, mountFlags)
+}
 
 // MaterializeNFSTarget is a test-only exported handle for materializeNFSTarget.
 //

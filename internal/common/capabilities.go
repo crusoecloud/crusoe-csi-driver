@@ -98,3 +98,16 @@ var NodeCapabilityExpandVolume = csi.NodeServiceCapability{
 		},
 	},
 }
+
+// NodeCapabilityStageUnstageVolume is advertised only by the fs node server. The
+// ssd node server leaves NodeStageVolume unimplemented, so it must never gain this
+// capability: keep it out of BaseNodeCapabilities and append it per-driver.
+//
+//nolint:gochecknoglobals  // can't construct const struct
+var NodeCapabilityStageUnstageVolume = csi.NodeServiceCapability{
+	Type: &csi.NodeServiceCapability_Rpc{
+		Rpc: &csi.NodeServiceCapability_RPC{
+			Type: csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
+		},
+	},
+}
