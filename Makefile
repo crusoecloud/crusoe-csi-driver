@@ -9,7 +9,7 @@ BUILDTAGS :=
 
 GOLANGCI_VERSION = v1.62.0
 GO_ACC_VERSION = v0.2.8
-GOTESTSUM_VERSION = v1.12
+GOTESTSUM_VERSION = v1.13.0
 # Pin gocover-cobertura: v1.5.0 requires Go >= 1.25 and breaks the go-ci-1.24
 # image (test-ci fails at `go install ...@latest`). v1.4.0 needs only Go 1.22.
 GOCOVER_VERSION = v1.4.0
@@ -66,6 +66,114 @@ lint-ci: ## Verifies `golangci-lint` passes and outputs in CI-friendly format
 	@echo "==> $@"
 	@golangci-lint version
 	@golangci-lint run ./... --timeout=10m --out-format code-climate > golangci-lint.json
+
+# Pin the testing repo tag: changes there can affect how these tests should be run here. Same
+# consumption pattern as region-coordinator, kubernetes-manager, and storms. Overridable so a run can
+# point at a testing branch before that work is tagged.
+FUNCTEST_VERSION ?= v0.0.454
+
+# Different repos hold the Slack credentials under different names: region-coordinator uses these
+# names directly, kubernetes-manager maps them from FUNCTEST_STAGING_SLACK_TOKEN and
+# K8s_ALERT_STAGING_CHANNEL_ID. Resolve here rather than in the job's script, because after_script
+# runs in a fresh shell: an export in script never reaches functest-ci-cleanup, so the claim would
+# be taken and never released wherever only the FUNCTEST_STAGING_* names are set.
+# Tested for emptiness rather than with ?=, which only fills an undefined variable. CI can define a
+# variable as empty, and an empty value has to fall back too.
+ifeq ($(strip $(SLACK_TOKEN)),)
+SLACK_TOKEN := $(FUNCTEST_STAGING_SLACK_TOKEN)
+endif
+ifeq ($(strip $(SLACK_STAGING_ALERTS_CHANNEL)),)
+SLACK_STAGING_ALERTS_CHANNEL := $(K8s_ALERT_STAGING_CHANNEL_ID)
+endif
+export SLACK_TOKEN
+export SLACK_STAGING_ALERTS_CHANNEL
+
+# Report every missing CI variable at once, before doing any work.
+#
+# The suite reads these from the environment and fails on the first one it happens to need, so a
+# missing set is discovered one 30-second job at a time. This lists all of them in a single run.
+#
+# What each is for, and why none can be dropped:
+#
+#   CI_PROJECT_ID_CRUSOE_TEST_ACC   the Crusoe project the tests create clusters and disks in
+#   CI_{ACCESS,SECRET}_KEY_...      that project's API credentials
+#   CI_{PUB,PRIV}_SSH_KEY_...       injected into test VMs so the suite can SSH in. The CSI tests
+#                                   never SSH anywhere, but internal/configs/setFromCIVars errors
+#                                   when either is empty, and parses the private key at startup, so
+#                                   the suite will not boot without them. The private key is
+#                                   base64-encoded (StdEncoding).
+#   SLACK_TOKEN                     posts the staging claim. resource_group only serialises within
+#   SLACK_STAGING_ALERTS_CHANNEL    one GitLab project, so the Slack claim is the only mutex that
+#                                   stops this run colliding with region-coordinator's.
+#   CSI_IMAGE                       the driver build under test, derived by the job
+#
+# Values live in 1Password under cloud-compute-devs+region-testing@crusoeenergy.com, per the comment
+# on internal/configs/setFromCIVars in the testing repo. They are set by hand per GitLab project,
+# not group-inherited and not in Terraform, which is why a new consumer starts with none of them.
+FUNCTEST_REQUIRED_VARS = \
+	CI_API_ENDPOINT_ENV \
+	CI_PROJECT_ID_CRUSOE_TEST_ACC \
+	CI_ACCESS_KEY_CRUSOE_TEST_ACC \
+	CI_SECRET_KEY_CRUSOE_TEST_ACC \
+	CI_PUB_SSH_KEY_CRUSOE_TEST_ACC \
+	CI_PRIV_SSH_KEY_CRUSOE_TEST_ACC \
+	SLACK_TOKEN \
+	SLACK_STAGING_ALERTS_CHANNEL \
+	CSI_IMAGE
+
+.PHONY: functest-preflight
+functest-preflight: ## Fail with the full list of CI variables this job still needs
+	@echo "==> $@"
+	@missing=""; \
+	for v in $(FUNCTEST_REQUIRED_VARS); do \
+		eval "val=\$$$$v"; \
+		if [ -z "$$val" ]; then \
+			missing="$$missing $$v"; \
+			echo "  MISSING  $$v"; \
+		else \
+			echo "  set      $$v"; \
+		fi; \
+	done; \
+	if [ -n "$$missing" ]; then \
+		echo "" >&2; \
+		echo "FAIL: these CI variables are empty or unset:$$missing" >&2; \
+		echo "      Set them in this project's CI settings; they are not group-inherited." >&2; \
+		echo "      Values: 1Password, cloud-compute-devs+region-testing@crusoeenergy.com." >&2; \
+		echo "      The private SSH key must be base64-encoded. See CRUSOE-95943." >&2; \
+		exit 1; \
+	fi; \
+	echo "all required variables are present"
+
+.PHONY: functest-ci
+functest-ci: ## Runs the CSI storage tests from the testing repo against this build of the driver
+	@echo "==> $@"
+	@go install gotest.tools/gotestsum@${GOTESTSUM_VERSION}
+	@go get gitlab.com/crusoeenergy/island/testing/functionality/utils@${FUNCTEST_VERSION}
+	@git clone --branch ${FUNCTEST_VERSION} --single-branch https://gitlab.com/crusoeenergy/island/testing.git && \
+		go run testing/functionality/cmd/slack_claim/main.go -service="crusoe-csi-driver" -timestampfile="functest_slack_timestamp" && \
+		cd testing/functionality/v1alpha5 && \
+		gotestsum --format standard-verbose --junitfile $(CURDIR)/functests.xml -- -json -race -v -timeout 50m \
+		-cluster-version $(FUNCTEST_CLUSTER_VERSION) -cmk-cluster-configuration=standard \
+		-csi-image=$(CSI_IMAGE) \
+		-fail-on-skipped-csi-fs \
+		-run 'TestKubernetesSuite' -csi-tests=ssd,fs $(EXTRA_FUNCTEST_FLAGS) && \
+		cd ../../..
+
+.PHONY: functest-ci-cleanup
+functest-ci-cleanup: ## Releases the staging claim, whether or not the functests passed
+	@echo "==> $@"
+# Runs from after_script, so it also runs when setup failed before the claim was taken. Without these
+# guards it fails on a missing timestamp file and buries the real error under its own.
+	@if [ ! -f functest_slack_timestamp ]; then \
+		echo "no staging claim was taken, nothing to release"; \
+		exit 0; \
+	fi; \
+	if [ ! -f testing/functionality/cmd/slack_unclaim/main.go ]; then \
+		echo "testing repo was never cloned, cannot release the claim; check the job log above" >&2; \
+		exit 0; \
+	fi; \
+	go run testing/functionality/cmd/slack_unclaim/main.go -service="crusoe-csi-driver" \
+		-timestamp="$$(cat functest_slack_timestamp)"
 
 .PHONY: build
 build: ## Builds the executable and places it in the build dir

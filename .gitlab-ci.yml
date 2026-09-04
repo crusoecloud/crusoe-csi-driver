@@ -7,7 +7,12 @@ default:
     - x86-crusoecloud_build_prod-docker-build
 
 variables:
-  CI_IMAGE: registry.gitlab.com/crusoeenergy/tools/go-ci-1.24
+  CI_IMAGE: registry.gitlab.com/crusoeenergy/tools/go-ci-1.26
+  # GitLab's registry rejects the attestation manifests buildkit v0.32+ attaches by default: the
+  # index push fails with "blob unknown to registry" naming a child it cannot resolve. Upstream is
+  # gitlab-org/container-registry#2367, fixed by gitlab-org/gitlab!249926. Remove this once that
+  # lands. Found by Dylan Lynch and Kishore Rajesh in #devx, 2026-08-24.
+  BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
 
 test_and_lint:
   rules:
@@ -38,6 +43,75 @@ build_and_push:
       --platform linux/amd64,linux/arm64 \
       -t "$RELEASE_IMAGE:${CI_COMMIT_REF_NAME##*/}" \
       --push .
+
+
+# Exercises this build of the driver on a real CMK cluster, the same suite region-coordinator and
+# kubernetes-manager gate on. Without -csi-image the suite tests whichever driver the cluster version
+# ships, which for this repo would mean gating a change on the released driver; -csi-image puts the
+# image built by build_and_push on the CSI workloads first.
+#
+# The pull secret uses CI_JOB_TOKEN, which is valid for the life of the job. The pods pull during the
+# job, so there is no need for a long-lived deploy token.
+functest:
+  stage: test
+  image: $CI_IMAGE:master
+  needs:
+    # Optional because build_and_push is itself filtered by .code-changes and a Dockerfile check. A
+    # hard need on a job the pipeline excluded makes the whole pipeline invalid, so this mirrors the
+    # shared template.
+    - job: build_and_push
+      optional: true
+  # A run is 30 to 45 minutes and GitLab's default job timeout is 60, which would kill the job at
+  # about the same moment the Go timeout fires: no JUnit, and after_script not guaranteed to run, so
+  # the staging claim leaks and blocks region-coordinator's functests too. Job timeout sits above the
+  # Go timeout (50m, see functest-ci) so the suite always reports and cleanup always runs.
+  timeout: 90m
+  before_script:
+    - go env -w "GOPRIVATE=${CI_SERVER_HOST}"
+    - echo -e "machine ${CI_SERVER_HOST} login gitlab-ci-token password ${CI_JOB_TOKEN}" > ~/.netrc
+  variables:
+    CI_API_ENDPOINT_ENV: "staging"
+    # No project or key mapping here. region-coordinator's staging functest references none of these,
+    # so CI_PROJECT_ID_CRUSOE_TEST_ACC and the access keys already resolve for the group and point at
+    # the staging functest project.
+    CI_PUB_SSH_KEY_CRUSOE_TEST_ACC: "$CI_PUB_SSH_KEY"
+    CI_PRIV_SSH_KEY_CRUSOE_TEST_ACC: "$CI_PRIV_SSH_KEY"
+    # 1.33 ships a driver new enough that the shared-volume tests run rather than gate-skip.
+    FUNCTEST_CLUSTER_VERSION: "1.33.4-cmk.24"
+    CSI_IMAGE_REGISTRY_USER: "gitlab-ci-token"
+    CSI_IMAGE_REGISTRY_PASSWORD: "$CI_JOB_TOKEN"
+  script:
+    # Derive the tag exactly as build_and_push does, off the same RELEASE_IMAGE, so this cannot drift
+    # from what was actually pushed. CI_COMMIT_REF_SLUG would not match: it rewrites the branch rather
+    # than stripping the prefix, so npujari/CRUSOE-1 becomes npujari-crusoe-1 instead of CRUSOE-1.
+    # Report every missing variable at once rather than one failed job per variable.
+    - make functest-preflight CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
+    - make functest-ci CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
+  after_script:
+    - make functest-ci-cleanup
+  # Only one functest can hold the staging cluster at a time.
+  resource_group: functest-resource-group
+  artifacts:
+    when: always
+    paths:
+      - functests.xml
+    reports:
+      junit: functests.xml
+  rules:
+    # Automatic and blocking on MRs to the default branch, which is the only long-lived branch in
+    # this repo, so it is the point where a change reaches everyone. A run provisions a cluster and
+    # takes 30 to 45 minutes. That cost is affordable here because changes are infrequent and come
+    # from one maintainer; region-coordinator and kubernetes-manager take continuous changes from
+    # several teams, which is why they gate a promotion branch instead of their trunk.
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
+      changes: !reference [.code-changes, changes]
+    # An MR stacked onto another feature branch gets an on-demand run instead. Same changes filter as
+    # above: without it a docs-only MR offers a functest button while build_and_push is filtered out,
+    # and there would be no image to test.
+    - if: '$CI_MERGE_REQUEST_ID'
+      changes: !reference [.code-changes, changes]
+      when: manual
+      allow_failure: true
 
 # Remove the tag_semver and pages jobs from merges into main.
 # The tag_semver job will be run using a GitHub action instead
