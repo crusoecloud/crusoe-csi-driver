@@ -113,6 +113,79 @@ functest:
       when: manual
       allow_failure: true
 
+# Gates a crusoe-csi-driver UPGRADE over mounted shared volumes. functest above is a fresh-install
+# gate: it installs one image on a clean cluster and never exercises the transition off a prior
+# driver. This job installs the released baseline first, holds a shared RWX volume mounted by
+# co-located pods, then upgrades to this build and asserts the in-place mounts survive the node
+# DaemonSet swap, a replacement pod remounts, and scale-to-zero remounts cleanly. That swap is the
+# event a node-mount-model change (CRUSOE-70479) runs through, which a fresh install cannot catch.
+# See TestKubernetesUpgradeSuite in the testing repo.
+#
+# Shares functest's staging claim (same resource_group), so the two run one at a time against the
+# single staging cluster rather than fighting over it or needing two clusters at once.
+functest-upgrade:
+  stage: test
+  image: $CI_IMAGE:master
+  needs:
+    - job: build_and_push
+      optional: true
+  # Same budget and reasoning as functest: job timeout above the Go timeout so the suite always
+  # reports and after_script always releases the claim.
+  timeout: 90m
+  before_script:
+    - go env -w "GOPRIVATE=${CI_SERVER_HOST}"
+    - echo -e "machine ${CI_SERVER_HOST} login gitlab-ci-token password ${CI_JOB_TOKEN}" > ~/.netrc
+  variables:
+    CI_API_ENDPOINT_ENV: "staging"
+    CI_PUB_SSH_KEY_CRUSOE_TEST_ACC: "$CI_PUB_SSH_KEY"
+    CI_PRIV_SSH_KEY_CRUSOE_TEST_ACC: "$CI_PRIV_SSH_KEY"
+    FUNCTEST_CLUSTER_VERSION: "1.33.4-cmk.24"
+    CSI_IMAGE_REGISTRY_USER: "gitlab-ci-token"
+    CSI_IMAGE_REGISTRY_PASSWORD: "$CI_JOB_TOKEN"
+  script:
+    - make functest-preflight CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
+    # Baseline = the chart's published appVersion (the released driver), resolved at runtime rather
+    # than pinned here. A pinned tag rots at the next chart release: it moved v0.4.12 -> v0.4.13
+    # mid-development, and a stale pin would test a released -> candidate step that no longer matches
+    # what customers upgrade from. Set CSI_BASELINE_IMAGE as a CI variable to override if the fetch
+    # ever needs pinning.
+    - |
+      if [ -z "${CSI_BASELINE_IMAGE:-}" ]; then
+        appVersion=$(curl -fsSL "https://raw.githubusercontent.com/crusoecloud/crusoe-csi-driver-helm-charts/release/charts/crusoe-csi-driver/Chart.yaml" \
+          | sed -n 's/^appVersion:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}.*/\1/p')
+        if [ -z "$appVersion" ]; then
+          echo "could not resolve the chart's published appVersion for the baseline image" >&2
+          exit 1
+        fi
+        CSI_BASELINE_IMAGE="ghcr.io/crusoecloud/crusoe-csi-driver:${appVersion}"
+      fi
+      echo "upgrade baseline image: ${CSI_BASELINE_IMAGE}"
+      make functest-upgrade-ci \
+        CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}" \
+        CSI_BASELINE_IMAGE="${CSI_BASELINE_IMAGE}"
+  after_script:
+    - make functest-ci-cleanup
+  resource_group: functest-resource-group
+  artifacts:
+    when: always
+    paths:
+      - functests-upgrade.xml
+    reports:
+      junit: functests-upgrade.xml
+  rules:
+    # Non-blocking for now (allow_failure). This gate is new: it needs a few green runs against
+    # staging before it blocks everyone's MRs, and FUNCTEST_VERSION must first point at a testing tag
+    # that contains TestKubernetesUpgradeSuite (before that, the -run selector matches nothing and the
+    # job passes vacuously). Once it has proven stable, drop allow_failure here to make it blocking
+    # like functest.
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
+      changes: !reference [.code-changes, changes]
+      allow_failure: true
+    - if: '$CI_MERGE_REQUEST_ID'
+      changes: !reference [.code-changes, changes]
+      when: manual
+      allow_failure: true
+
 # Remove the tag_semver and pages jobs from merges into main.
 # The tag_semver job will be run using a GitHub action instead
 # and new versions will be pushed then.
