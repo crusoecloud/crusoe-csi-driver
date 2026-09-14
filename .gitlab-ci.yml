@@ -142,6 +142,9 @@ functest-upgrade:
     FUNCTEST_CLUSTER_VERSION: "1.33.4-cmk.24"
     CSI_IMAGE_REGISTRY_USER: "gitlab-ci-token"
     CSI_IMAGE_REGISTRY_PASSWORD: "$CI_JOB_TOKEN"
+    # THROWAWAY e2e branch only: run the upgrade suite from its feature branch before it is tagged.
+    # Do NOT merge this branch. On main, FUNCTEST_VERSION is a released tag (see the Makefile).
+    FUNCTEST_VERSION: "npujari/CRUSOE-103809-csi-upgrade-functest"
   script:
     - make functest-preflight CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
     # Baseline = the chart's published appVersion (the released driver), resolved at runtime rather
