@@ -10,31 +10,33 @@ import (
 	"k8s.io/mount-utils"
 )
 
-// nodeStageVolume mounts the fs volume once per node at the staging target path.
-// The NFS export (or virtiofs shared disk) is mounted read-write here; each pod's
-// NodePublishVolume then bind-mounts from this path and applies readonly per pod.
-// This is the expensive, superblock-creating mount: kubelet issues it once per
-// volume per node and reference-counts it, so pod churn no longer re-mounts the
-// export.
-func nodeStageVolume(
+// stageVolume mounts the fs volume once per node at the staging target path if it
+// is not already mounted there. The NFS export (or virtiofs shared disk) is mounted
+// read-write here; each pod's NodePublishVolume then bind-mounts from this path and
+// applies readonly per pod. Both NodeStageVolume and NodePublishVolume drive this
+// (via Node.ensureStaged): publish stages too, so a pod still gets a real mount when
+// the CO skipped NodeStage, e.g. a driver upgrade where kubelet already treated the
+// volume as device-mounted for a pod published before the upgrade (CRUSOE-103809).
+// It is idempotent: an already-staged path returns early with no second mount.
+func stageVolume(
 	mounter *mount.SafeFormatAndMount,
 	nfsEnabled bool,
-	nfsRemotePorts string,
-	nfsHost string,
-	request *csi.NodeStageVolumeRequest,
+	nfsRemotePorts, nfsHost, stagingTargetPath, volumeID string,
+	volumeCapability *csi.VolumeCapability,
+	volumeContext map[string]string,
 ) error {
-	if request.GetVolumeCapability().GetBlock() != nil {
-		return fmt.Errorf("%w: %s", node.ErrUnsupportedVolumeCapability, request.GetVolumeCapability())
+	if volumeCapability.GetBlock() != nil {
+		return fmt.Errorf("%w: %s", node.ErrUnsupportedVolumeCapability, volumeCapability)
 	}
 
-	stagingTargetPath := request.GetStagingTargetPath()
-
-	devicePath, err := getFSDevicePath(request.GetVolumeId(), request.GetVolumeContext(), nfsEnabled, nfsHost)
+	devicePath, err := getFSDevicePath(volumeID, volumeContext, nfsEnabled, nfsHost)
 	if err != nil {
 		return fmt.Errorf("failed to get device path: %w", err)
 	}
 
 	// Idempotency: if the export is already staged at this path, return early.
+	// VerifyMountedVolumeWithUtils is device-name based, which is correct here: the
+	// staging path only ever holds the direct export mount, never a bind.
 	alreadyMounted, checkErr := node.VerifyMountedVolumeWithUtils(mounter, stagingTargetPath, devicePath)
 	if checkErr != nil {
 		return fmt.Errorf("failed to verify if volume is already staged: %w", checkErr)
@@ -43,13 +45,11 @@ func nodeStageVolume(
 		return nil
 	}
 
-	mountFlags := request.GetVolumeCapability().GetMount().GetMountFlags()
-
-	return stageMount(mounter, nfsEnabled, nfsRemotePorts, devicePath, stagingTargetPath, mountFlags)
+	return stageMount(mounter, nfsEnabled, nfsRemotePorts, devicePath, stagingTargetPath, volumeCapability.GetMount().GetMountFlags())
 }
 
 // stageMount assembles the mount options and performs the real mount at the
-// staging path. It is split from nodeStageVolume (which does the platform-specific
+// staging path. It is split from stageVolume (which does the device-path lookup and
 // already-mounted pre-check) so the option assembly can be unit-tested with a mock
 // mounter.
 func stageMount(

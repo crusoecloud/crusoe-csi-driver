@@ -2,7 +2,9 @@ package fs
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -85,17 +87,8 @@ func (d *Node) NodeStageVolume(ctx context.Context, request *csi.NodeStageVolume
 	}
 	defer d.VolumeLocks.Release(stagingTargetPath)
 
-	nfsEnabled, err := crusoe.GetNFSFlag(ctx, d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
-	if err != nil {
-		klog.Errorf("%s: %s", node.ErrFailedToFetchNFSFlag, err)
-
-		return nil, status.Errorf(codes.Internal, "%s: %s", node.ErrFailedToFetchNFSFlag, err)
-	}
-	klog.Infof("NFS enabled: %v", nfsEnabled)
-
-	nfsHost, nfsRemotePorts := d.resolveNFSTarget(ctx, request.GetVolumeId(), nfsEnabled)
-
-	err = nodeStageVolume(d.Mounter, nfsEnabled, nfsRemotePorts, nfsHost, request)
+	err := d.ensureStaged(ctx, stagingTargetPath, request.GetVolumeId(),
+		request.GetVolumeCapability(), request.GetVolumeContext())
 	if err != nil {
 		klog.Errorf("failed to stage volume %s: %s", request.GetVolumeId(), err.Error())
 
@@ -105,6 +98,77 @@ func (d *Node) NodeStageVolume(ctx context.Context, request *csi.NodeStageVolume
 	klog.Infof("Successfully staged volume: %s", request.GetVolumeId())
 
 	return &csi.NodeStageVolumeResponse{}, nil
+}
+
+// ensureStaged mounts the export at the staging path if it is not already mounted
+// there, resolving the NFS target and NFS-vs-virtiofs flag first. It is the shared
+// core of NodeStageVolume and the stage step of NodePublishVolume, so both reach a
+// staged export by the same path (CRUSOE-103809). Callers must already hold the
+// staging-path lock.
+//
+// It short-circuits on an already-mounted staging path with a cheap IsMountPoint
+// check before any Crusoe API call. That keeps the common publish (kubelet staged
+// first, or an earlier publish staged) free of API calls, so a Crusoe API outage
+// cannot stop a pod that only needs a bind from a mount that already exists. The
+// full path (flag fetch, target resolution, mount) runs only when the export is
+// genuinely not staged yet, e.g. a pod rescheduled after an in-place upgrade from a
+// driver that never staged.
+func (d *Node) ensureStaged(
+	ctx context.Context,
+	stagingTargetPath, volumeID string,
+	volumeCapability *csi.VolumeCapability,
+	volumeContext map[string]string,
+) error {
+	staged, err := d.Mounter.IsMountPoint(stagingTargetPath)
+	switch {
+	case err == nil:
+		if staged {
+			return nil
+		}
+	case os.IsNotExist(err):
+		// Staging dir not created yet; stageMount's MkdirAll makes it below.
+	default:
+		return fmt.Errorf("failed to check staging path %s: %w", stagingTargetPath, err)
+	}
+
+	nfsEnabled, err := crusoe.GetNFSFlag(ctx, d.CrusoeHTTPClient, d.CrusoeAPIEndpoint, d.HostInstance.ProjectId)
+	if err != nil {
+		return fmt.Errorf("%s: %w", node.ErrFailedToFetchNFSFlag, err)
+	}
+	klog.Infof("NFS enabled: %v", nfsEnabled)
+
+	nfsHost, nfsRemotePorts := d.resolveNFSTarget(ctx, volumeID, nfsEnabled)
+
+	return stageVolume(d.Mounter, nfsEnabled, nfsRemotePorts, nfsHost,
+		stagingTargetPath, volumeID, volumeCapability, volumeContext)
+}
+
+// stageForPublish runs the stage step of NodePublishVolume under the staging-path
+// lock, the same key NodeStageVolume uses, so a concurrent stage and this
+// publish-driven stage cannot both mount. It returns codes.Aborted when the lock
+// is already held.
+//
+// It is its own method so the release stays deferred: a manual release after
+// ensureStaged would leak the lock if ensureStaged panicked, wedging every later
+// stage and publish for the volume in Aborted. The defer also fires before the
+// caller binds, so the lock is held only across the stage, not the bind. Lock
+// order is the caller's target lock then this staging lock; NodeStageVolume only
+// ever takes the staging lock, so there is no cycle and no deadlock.
+func (d *Node) stageForPublish(
+	ctx context.Context,
+	stagingTargetPath, volumeID string,
+	volumeCapability *csi.VolumeCapability,
+	volumeContext map[string]string,
+) error {
+	if !d.VolumeLocks.TryAcquire(stagingTargetPath) {
+		klog.Warningf("operation already in progress for staging target path %s, returning Aborted", stagingTargetPath)
+
+		return status.Errorf(codes.Aborted, node.VolumeOperationAlreadyExistsFmt, stagingTargetPath)
+	}
+	defer d.VolumeLocks.Release(stagingTargetPath)
+
+	//nolint:wrapcheck // caller maps this to a gRPC status; wrapping here would double-wrap
+	return d.ensureStaged(ctx, stagingTargetPath, volumeID, volumeCapability, volumeContext)
 }
 
 // NodeUnstageVolume unmounts the per-node staging mount. The CO calls this only
@@ -145,29 +209,33 @@ func (d *Node) NodeUnstageVolume(_ context.Context, request *csi.NodeUnstageVolu
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
-// NodePublishVolume bind-mounts the already-staged volume into the pod's target
-// path. The expensive export mount happens once in NodeStageVolume; publish is a
-// cheap bind, so a pod restart is unbind + rebind against a mount that stays put.
-func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolumeRequest) (
+// NodePublishVolume bind-mounts the staged volume into the pod's target path. It
+// ensures the export is staged first (via ensureStaged), so a pod gets a real
+// mount even when the CO skipped NodeStageVolume. That happens after an in-place
+// upgrade from a driver that did not stage: kubelet still treats the volume as
+// device-mounted for a pod published before the upgrade, so it never calls
+// NodeStageVolume for a pod rescheduled onto the node, and a bind of the empty
+// staging dir would give that pod an empty mount (CRUSOE-103809). In the common
+// case the export is already staged and this is a cheap bind.
+func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVolumeRequest) (
 	*csi.NodePublishVolumeResponse,
 	error,
 ) {
 	klog.Infof("Received request to publish volume: %+v", request)
 
-	// With STAGE_UNSTAGE_VOLUME advertised the CO must call NodeStageVolume first,
-	// so a publish without a staging path is a CO/programmer error, not something
-	// to paper over by re-mounting the export here.
-	if request.GetStagingTargetPath() == "" {
-		return nil, status.Errorf(codes.FailedPrecondition,
-			"staging target path must be provided; NodeStageVolume must run before NodePublishVolume")
+	// The staging path is where ensureStaged mounts the export and what the bind
+	// clones from, so it is required. kubelet always sends it with
+	// STAGE_UNSTAGE_VOLUME advertised; an empty value is a malformed request.
+	stagingTargetPath := request.GetStagingTargetPath()
+	if stagingTargetPath == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "%s: NodePublishVolume", node.ErrVolumePathEmpty)
 	}
 
 	// Serialise on the target path, not the volume ID. A shared-FS volume is
 	// published to a separate target path per pod and the CSI spec allows those
 	// calls to run concurrently, so locking per volume would refuse legitimate
 	// work. Locking per target closes the actual race: kubelet re-drives
-	// NodePublishVolume for the same target when its deadline expires. The bind is
-	// cheap now, but the guard is kept because the re-drive still happens.
+	// NodePublishVolume for the same target when its deadline expires.
 	//
 	// csi-driver-nfs keys the same lock on volumeID + "-" + targetPath. The
 	// target path already carries the PV name, which is one to one with a volume,
@@ -179,6 +247,21 @@ func (d *Node) NodePublishVolume(_ context.Context, request *csi.NodePublishVolu
 		return nil, status.Errorf(codes.Aborted, node.VolumeOperationAlreadyExistsFmt, targetPath)
 	}
 	defer d.VolumeLocks.Release(targetPath)
+
+	// Ensure the export is staged before binding, under the staging-path lock and
+	// released before the bind (see stageForPublish).
+	if stageErr := d.stageForPublish(ctx, stagingTargetPath, request.GetVolumeId(),
+		request.GetVolumeCapability(), request.GetVolumeContext()); stageErr != nil {
+		// A held staging lock is a concurrent stage in flight: surface Aborted so the
+		// CO retries, rather than reporting it as an internal failure.
+		if status.Code(stageErr) == codes.Aborted {
+			return nil, stageErr
+		}
+		klog.Errorf("failed to stage volume %s during publish: %s", request.GetVolumeId(), stageErr.Error())
+
+		return nil, status.Errorf(codes.Internal,
+			"failed to stage volume %s during publish: %s", request.GetVolumeId(), stageErr.Error())
+	}
 
 	err := nodePublishVolumeBind(d.Mounter, request)
 	if err != nil {
