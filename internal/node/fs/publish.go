@@ -28,6 +28,11 @@ func stageVolume(
 	if volumeCapability.GetBlock() != nil {
 		return fmt.Errorf("%w: %s", node.ErrUnsupportedVolumeCapability, volumeCapability)
 	}
+	// A nil capability, or one that is neither Block nor Mount, is malformed: reject
+	// it instead of falling through to a mount with empty options.
+	if volumeCapability.GetMount() == nil {
+		return fmt.Errorf("%w: %s", node.ErrUnexpectedVolumeCapability, volumeCapability)
+	}
 
 	devicePath, err := getFSDevicePath(volumeID, volumeContext, nfsEnabled, nfsHost)
 	if err != nil {
