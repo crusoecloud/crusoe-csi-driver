@@ -8,7 +8,7 @@
   It mounts each shared NFS export a single time per node (`NodeStageVolume`) and
   bind-mounts that into each pod, instead of mounting the export separately for every
   pod. This removes the per-pod mount/umount churn on the shared NFS superblock that
-  drove the mount stalls in INC-648. The `ssd` driver is unchanged.
+  drove the mount stalls in a production incident. The `ssd` driver is unchanged.
 - Pod-visible mount paths are unchanged. A pod still sees its volume at the same
   target path; only the source becomes a bind of the per-node mount.
 
@@ -35,5 +35,5 @@
 - Cleanup, per affected node: `umount` the orphaned mount at
   `/var/lib/kubelet/plugins/kubernetes.io/csi/fs.csi.crusoe.ai/<hash>/globalmount`
   (run it in the node's mount namespace, e.g. `nsenter -t 1 -m -- umount <path>`).
-- Validated on CMK (kubelet 1.33.4): upgrade path via the automated functest
-  (CRUSOE-103809), downgrade path manually.
+- Validated on CMK (kubelet 1.33.4): upgrade path via the automated functest,
+  downgrade path manually.
