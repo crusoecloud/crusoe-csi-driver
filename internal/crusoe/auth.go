@@ -187,11 +187,9 @@ func NewCrusoeClient(host, key, secret, userAgent string) *crusoeapi.APIClient {
 	cfg := crusoeapi.NewConfiguration()
 	cfg.UserAgent = userAgent
 	cfg.BasePath = host
-	if cfg.HTTPClient == nil {
-		cfg.HTTPClient = http.DefaultClient
-	}
-
-	cfg.HTTPClient.Transport = NewAuthenticatingTransport(cfg.HTTPClient.Transport, key, secret)
+	// A client of its own: signing through http.DefaultClient would sign every
+	// request made through it, whatever the host.
+	cfg.HTTPClient = NewCrusoeHTTPClient(key, secret)
 
 	return crusoeapi.NewAPIClient(cfg)
 }
