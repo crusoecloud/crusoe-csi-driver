@@ -100,13 +100,13 @@ func TestResolveNFSTarget_OverrideSkipsDiskAndFlags(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	node := &fs.Node{
-		CrusoeHTTPClient:       srv.Client(),
-		CrusoeAPIEndpoint:      srv.URL,
-		HostInstance:           &crusoeapi.InstanceV1Alpha5{ProjectId: "proj-1", Location: "some-location"},
-		NFSHost:                "10.0.0.2",
-		NFSRemotePorts:         "10.0.0.2-10.0.0.9",
-		OverrideNFSHost:        "172.27.1.10",
-		OverrideNFSRemotePorts: "172.27.1.10-172.27.1.25",
+		CrusoeHTTPClient:  srv.Client(),
+		CrusoeAPIEndpoint: srv.URL,
+		HostInstance:      &crusoeapi.InstanceV1Alpha5{ProjectId: "proj-1", Location: "some-location"},
+		NFSHost:           "10.0.0.2",
+		NFSRemotePorts:    "10.0.0.2-10.0.0.9",
+		NFSOverrideHost:   "172.27.1.10",
+		NFSOverridePorts:  "172.27.1.10-172.27.1.25",
 	}
 
 	host, ports := node.ResolveNFSTargetForTest(context.Background(), "vol-1", true)

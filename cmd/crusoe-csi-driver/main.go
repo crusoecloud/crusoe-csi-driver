@@ -60,7 +60,7 @@ func setFlags() {
 	rootCmd.Flags().String(internal.NFSRemotePortsFlag, internal.NFSRemotePortsDefault, "NFS Remote Ports")
 	rootCmd.Flags().String(internal.NFSHostFlag, internal.NFSHostDefault, "NFS Host")
 	rootCmd.Flags().String(internal.NFSTargetOverrideFlag, "",
-		"NFS target for every fs mount on this node, ignoring the disk API: <IP> or <startIP>-<endIP>")
+		"Break-glass NFS target for every fs mount on this node, ignoring the disk API: <IP> or <startIP>-<endIP>")
 
 	err = viper.BindPFlags(rootCmd.Flags())
 	if err != nil {
