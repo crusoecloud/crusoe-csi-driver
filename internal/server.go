@@ -88,7 +88,7 @@ func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alp
 			return fmt.Errorf("--%s: %w", NFSTargetOverrideFlag, err)
 		}
 		if overrideHost != "" {
-			klog.Warningf("Break-glass NFS target override is set: every fs volume on this node mounts host=%s remoteports=%s "+
+			klog.Warningf("NFS target override is set: every fs volume on this node mounts host=%s remoteports=%s "+
 				"and ignores the target from the disk API", overrideHost, overrideRemotePorts)
 		}
 

@@ -54,9 +54,9 @@ type Node struct {
 	PluginName        string
 	PluginVersion     string
 	NFSRemotePorts    string
-	// NFSOverrideHost and NFSOverridePorts hold the break-glass
-	// nfs-target-override (see ParseNFSTargetOverride). When set, they replace
-	// the NFS target for every volume this node mounts.
+	// NFSOverrideHost and NFSOverridePorts hold the nfs-target-override (see
+	// ParseNFSTargetOverride). When set, they replace the NFS target for every
+	// volume this node mounts.
 	NFSOverrideHost   string
 	NFSOverridePorts  string
 	Capabilities      []*csi.NodeServiceCapability
@@ -151,7 +151,7 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 // back wholesale to legacyResolveNFSTarget, so a resolver problem is never worse
 // than today's behaviour.
 //
-// The break-glass override (nfs-target-override) beats all of the above and
+// The nfs-target-override setting beats all of the above and
 // skips the disk lookup and both flag fetches.
 func (d *Node) resolveNFSTarget(
 	ctx context.Context, volumeID string, nfsEnabled bool,
