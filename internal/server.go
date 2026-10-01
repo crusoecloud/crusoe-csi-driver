@@ -60,7 +60,7 @@ func registerController(grpcServer *grpc.Server, hostInstance *crusoeapi.Instanc
 	})
 }
 
-func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) {
+func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) error {
 	// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
 	capabilities := common.BaseNodeCapabilities
 	var maxVolumesPerNode int64
@@ -83,21 +83,32 @@ func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alp
 			MaxVolumesPerNode: maxVolumesPerNode,
 		}
 	case common.DiskTypeFS:
+		overrideHost, overrideRemotePorts, err := fs.ParseNFSTargetOverride(viper.GetString(NFSTargetOverrideFlag))
+		if err != nil {
+			return fmt.Errorf("--%s: %w", NFSTargetOverrideFlag, err)
+		}
+		if overrideHost != "" {
+			klog.Warningf("NFS target override is set: every fs volume on this node mounts host=%s remoteports=%s "+
+				"and ignores the target from the disk API", overrideHost, overrideRemotePorts)
+		}
+
 		maxVolumesPerNode = common.MaxFSVolumesPerNode
 		nodeServer = &fs.Node{
-			CrusoeClient:      newCrusoeClientWithViperConfig(),
-			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
-			Mounter:           mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
-			Resizer:           mount.NewResizeFs(exec.New()),
-			CrusoeAPIEndpoint: viper.GetString(CrusoeAPIEndpointFlag),
-			NFSRemotePorts:    viper.GetString(NFSRemotePortsFlag),
-			NFSHost:           viper.GetString(NFSHostFlag),
-			DiskType:          common.PluginDiskType,
-			PluginName:        common.PluginName,
-			PluginVersion:     common.PluginVersion,
-			HostInstance:      hostInstance,
-			Capabilities:      capabilities,
-			MaxVolumesPerNode: maxVolumesPerNode,
+			CrusoeClient:           newCrusoeClientWithViperConfig(),
+			CrusoeHTTPClient:       newCrusoeHTTPClientWithViperConfig(),
+			Mounter:                mount.NewSafeFormatAndMount(mount.New(""), exec.New()),
+			Resizer:                mount.NewResizeFs(exec.New()),
+			CrusoeAPIEndpoint:      viper.GetString(CrusoeAPIEndpointFlag),
+			NFSRemotePorts:         viper.GetString(NFSRemotePortsFlag),
+			NFSHost:                viper.GetString(NFSHostFlag),
+			OverrideNFSHost:        overrideHost,
+			OverrideNFSRemotePorts: overrideRemotePorts,
+			DiskType:               common.PluginDiskType,
+			PluginName:             common.PluginName,
+			PluginVersion:          common.PluginVersion,
+			HostInstance:           hostInstance,
+			Capabilities:           capabilities,
+			MaxVolumesPerNode:      maxVolumesPerNode,
 		}
 	default:
 		// Switch is intended to be exhaustive, reaching this case is a bug
@@ -106,9 +117,11 @@ func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alp
 	}
 
 	csi.RegisterNodeServer(grpcServer, nodeServer)
+
+	return nil
 }
 
-func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) {
+func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) error {
 	serveIdentity := false
 	serveController := false
 	serveNode := false
@@ -135,8 +148,10 @@ func registerServices(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV
 	}
 
 	if serveNode {
-		registerNode(grpcServer, hostInstance)
+		return registerNode(grpcServer, hostInstance)
 	}
+
+	return nil
 }
 
 func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptChan <-chan os.Signal) error {
@@ -148,7 +163,9 @@ func Serve(rootCtx context.Context, rootCtxCancel context.CancelFunc, interruptC
 	klog.Infof("Crusoe host instance ID: %v", hostInstance.Id)
 
 	srv := grpc.NewServer(grpc.ConnectionTimeout(gracefulTimeoutDuration))
-	registerServices(srv, hostInstance)
+	if err = registerServices(srv, hostInstance); err != nil {
+		return fmt.Errorf("failed to register services: %w", err)
+	}
 	listener, err := listen()
 	if err != nil {
 		return err
