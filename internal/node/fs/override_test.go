@@ -33,6 +33,10 @@ func TestParseNFSTargetOverride_Valid(t *testing.T) {
 		{name: "single ip", value: start, wantHost: start, wantRemotePorts: start},
 		{name: "range of one collapses", value: start + "-" + start, wantHost: start, wantRemotePorts: start},
 		{name: "surrounding whitespace", value: " " + span + " ", wantHost: start, wantRemotePorts: span},
+		{
+			name: "range at the vastnfs limit of 2048 addresses", value: "10.0.0.1-10.0.8.0",
+			wantHost: "10.0.0.1", wantRemotePorts: "10.0.0.1-10.0.8.0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -65,6 +69,7 @@ func TestParseNFSTargetOverride_Invalid(t *testing.T) {
 		{name: "end below start", value: "172.27.1.25-172.27.1.10"},
 		{name: "three parts", value: "172.27.1.10-172.27.1.20-172.27.1.25"},
 		{name: "comma list", value: "172.27.1.10,172.27.1.11"},
+		{name: "range over the vastnfs limit of 2048 addresses", value: "10.0.0.0-10.0.8.0"},
 		{name: "ipv6", value: "fd00::1"},
 		{name: "unspecified", value: "0.0.0.0"},
 	}
