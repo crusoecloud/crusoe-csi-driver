@@ -54,6 +54,11 @@ type Node struct {
 	PluginName        string
 	PluginVersion     string
 	NFSRemotePorts    string
+	// NFSOverrideHost and NFSOverridePorts hold the nfs-target-override (see
+	// ParseNFSTargetOverride). When set, they replace the NFS target for every
+	// volume this node mounts.
+	NFSOverrideHost   string
+	NFSOverridePorts  string
 	Capabilities      []*csi.NodeServiceCapability
 	MaxVolumesPerNode int64
 }
@@ -145,9 +150,19 @@ func (d *Node) NodePublishVolume(ctx context.Context, request *csi.NodePublishVo
 // from an unspecified-IPv6 answer). Any failure or timeout in the new path falls
 // back wholesale to legacyResolveNFSTarget, so a resolver problem is never worse
 // than today's behaviour.
+//
+// The nfs-target-override setting beats all of the above and
+// skips the disk lookup and both flag fetches.
 func (d *Node) resolveNFSTarget(
 	ctx context.Context, volumeID string, nfsEnabled bool,
 ) (nfsHost, nfsRemotePorts string) {
+	if d.NFSOverrideHost != "" {
+		klog.Infof("Using NFS target override for volume %s: host=%s remoteports=%s",
+			volumeID, d.NFSOverrideHost, d.NFSOverridePorts)
+
+		return d.NFSOverrideHost, d.NFSOverridePorts
+	}
+
 	disk := d.fetchDiskOrNil(ctx, volumeID, nfsEnabled)
 
 	if !d.userspaceDNSResolutionEnabled(ctx) {

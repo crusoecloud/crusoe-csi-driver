@@ -56,6 +56,7 @@ const (
 	SocketAddressFlag     = "socket-address"
 	NFSRemotePortsFlag    = "nfs-remote-ports"
 	NFSHostFlag           = "nfs-host"
+	NFSTargetOverrideFlag = "nfs-target-override"
 )
 
 const (
