@@ -56,9 +56,9 @@ const (
 	OperationTimeout = 5 * time.Minute
 
 	// MaxSSDVolumesPerNode refers to the maximum number of SSD disks that can be attached to a VM,
-	// including its boot disk
+	// including its boot disk: 15 data disks plus the boot disk.
 	// ref: https://docs.crusoecloud.com/storage/disks/overview#persistent-disks
-	MaxSSDVolumesPerNode = 15
+	MaxSSDVolumesPerNode = 16
 
 	// MaxFSVolumesPerNode refers to the maximum number of disks that can be attached to a VM
 	// ref: https://docs.crusoecloud.com/storage/disks/overview/index.html#shared-disks
