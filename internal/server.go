@@ -60,15 +60,29 @@ func registerController(grpcServer *grpc.Server, hostInstance *crusoeapi.Instanc
 	})
 }
 
+// nodeVolumeLimit returns the volume limit the node plugin reports in NodeGetInfo.
+// kubelet writes it to CSINode allocatable.count, which the scheduler enforces.
+func nodeVolumeLimit(diskType common.DiskType) int64 {
+	switch diskType {
+	case common.DiskTypeSSD:
+		return common.MaxSSDVolumesPerNode - 1 // Subtract 1 to allow for the OS/boot disk
+	case common.DiskTypeFS:
+		return common.MaxFSVolumesPerNode
+	default:
+		// Switch is intended to be exhaustive, reaching this case is a bug
+		panic(fmt.Sprintf(
+			"Switch is intended to be exhaustive, %s is not a valid switch case", diskType))
+	}
+}
+
 func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) error {
 	// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
 	capabilities := common.BaseNodeCapabilities
-	var maxVolumesPerNode int64
+	maxVolumesPerNode := nodeVolumeLimit(common.PluginDiskType)
 	var nodeServer csi.NodeServer
 
 	switch common.PluginDiskType {
 	case common.DiskTypeSSD:
-		maxVolumesPerNode = common.MaxSSDVolumesPerNode - 1 // Subtract 1 to allow for the OS/boot disk
 		nodeServer = &ssd.Node{
 			CrusoeClient:      newCrusoeClientWithViperConfig(),
 			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
@@ -92,7 +106,6 @@ func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alp
 				"and ignores the target from the disk API", overrideHost, overrideRemotePorts)
 		}
 
-		maxVolumesPerNode = common.MaxFSVolumesPerNode
 		nodeServer = &fs.Node{
 			CrusoeClient:      newCrusoeClientWithViperConfig(),
 			CrusoeHTTPClient:  newCrusoeHTTPClientWithViperConfig(),
