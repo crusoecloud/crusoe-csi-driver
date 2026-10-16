@@ -70,7 +70,7 @@ lint-ci: ## Verifies `golangci-lint` passes and outputs in CI-friendly format
 # Pin the testing repo tag: changes there can affect how these tests should be run here. Same
 # consumption pattern as region-coordinator, kubernetes-manager, and storms. Overridable so a run can
 # point at a testing branch before that work is tagged.
-FUNCTEST_VERSION ?= v0.0.454
+FUNCTEST_VERSION ?= v0.0.490
 
 # Different repos hold the Slack credentials under different names: region-coordinator uses these
 # names directly, kubernetes-manager maps them from FUNCTEST_STAGING_SLACK_TOKEN and
@@ -144,20 +144,47 @@ functest-preflight: ## Fail with the full list of CI variables this job still ne
 	fi; \
 	echo "all required variables are present"
 
+# functest-ci runs one suite from the testing repo against this build. The defaults gate a fresh
+# install (TestKubernetesSuite over ssd + fs); functest-upgrade-ci overrides them to gate an upgrade,
+# so the clone, the staging claim, and the run all live in one place.
+#
+# TestKubernetesUpgradeSuite first appears in testing v0.0.490 (CRUSOE-103809). With FUNCTEST_VERSION
+# below that tag, functest-upgrade-ci fails at startup on "flag provided but not defined:
+# -csi-baseline-image".
+FUNCTEST_RUN ?= TestKubernetesSuite
+FUNCTEST_JUNIT ?= functests.xml
+# Per-suite CSI flags. The fresh-install suite reads -csi-tests and -fail-on-skipped-csi-fs; the
+# upgrade suite reads -csi-baseline-image instead. Defaulted for the fresh-install job.
+FUNCTEST_CSI_FLAGS ?= -fail-on-skipped-csi-fs -csi-tests=ssd,fs
+
 .PHONY: functest-ci
-functest-ci: ## Runs the CSI storage tests from the testing repo against this build of the driver
+functest-ci: ## Runs a testing-repo CSI suite (default: fresh install) against this build of the driver
 	@echo "==> $@"
 	@go install gotest.tools/gotestsum@${GOTESTSUM_VERSION}
 	@go get gitlab.com/crusoeenergy/island/testing/functionality/utils@${FUNCTEST_VERSION}
 	@git clone --branch ${FUNCTEST_VERSION} --single-branch https://gitlab.com/crusoeenergy/island/testing.git && \
 		go run testing/functionality/cmd/slack_claim/main.go -service="crusoe-csi-driver" -timestampfile="functest_slack_timestamp" && \
 		cd testing/functionality/v1alpha5 && \
-		gotestsum --format standard-verbose --junitfile $(CURDIR)/functests.xml -- -json -race -v -timeout 50m \
+		gotestsum --format standard-verbose --junitfile $(CURDIR)/$(FUNCTEST_JUNIT) -- -json -race -v -timeout 50m \
 		-cluster-version $(FUNCTEST_CLUSTER_VERSION) -cmk-cluster-configuration=standard \
 		-csi-image=$(CSI_IMAGE) \
-		-fail-on-skipped-csi-fs \
-		-run 'TestKubernetesSuite' -csi-tests=ssd,fs $(EXTRA_FUNCTEST_FLAGS) && \
+		-run '$(FUNCTEST_RUN)' $(FUNCTEST_CSI_FLAGS) $(EXTRA_FUNCTEST_FLAGS) && \
 		cd ../../..
+
+.PHONY: functest-upgrade-ci
+functest-upgrade-ci: ## Gates upgrade and rollback over mounted volumes: released baseline <-> this build
+	@echo "==> $@"
+# A blocking gate that quietly tests nothing is worse than no gate. TestKubernetesUpgradeSuite skips
+# itself when no baseline is given, which Go records as a pass, so refuse to run without one.
+	@test -n "$(CSI_BASELINE_IMAGE)" || { \
+		echo "FAIL: CSI_BASELINE_IMAGE is empty; set it to the released baseline to upgrade from," >&2; \
+		echo "      e.g. ghcr.io/crusoecloud/crusoe-csi-driver:vX.Y.Z (the chart's published appVersion)." >&2; \
+		exit 1; \
+	}
+	@$(MAKE) functest-ci \
+		FUNCTEST_RUN=TestKubernetesUpgradeSuite \
+		FUNCTEST_JUNIT=functests-upgrade.xml \
+		FUNCTEST_CSI_FLAGS="-csi-baseline-image=$(CSI_BASELINE_IMAGE)"
 
 .PHONY: functest-ci-cleanup
 functest-ci-cleanup: ## Releases the staging claim, whether or not the functests passed
