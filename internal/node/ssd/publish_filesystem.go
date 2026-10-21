@@ -3,6 +3,7 @@ package ssd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/crusoecloud/crusoe-csi-driver/internal/node"
@@ -27,23 +28,15 @@ func (p *PublishFilesystem) Publish() error {
 
 	p.MountOpts = append(p.MountOpts, p.Request.GetVolumeCapability().GetMount().GetMountFlags()...)
 
-	err := p.Mounter.FormatAndMount(p.DevicePath,
-		p.Request.GetTargetPath(),
-		p.Request.GetVolumeCapability().GetMount().GetFsType(),
-		p.MountOpts)
-	if err != nil {
+	// CRUSOE-99112 RED RUN, DO NOT MERGE: bind-mount a directory local to this node instead of
+	// the volume, so a write lands on the node and a pod on another node never sees it.
+	fake := filepath.Join("/tmp/csi99112-fake", p.Request.GetVolumeId())
+	if err := os.MkdirAll(fake, node.NewDirPerms); err != nil {
+		return fmt.Errorf("failed to make fake volume directory: %w", err)
+	}
+
+	if err := p.Mounter.Mount(fake, p.Request.GetTargetPath(), "", []string{"bind"}); err != nil {
 		return fmt.Errorf("%w at target path %s: %s", node.ErrFailedMount, p.Request.GetTargetPath(), err.Error())
-	}
-
-	// Resize the filesystem to span the entire disk
-	// The size of the underlying disk may have changed due to volume expansion (offline)
-	ok, err := p.Resizer.Resize(p.DevicePath, p.Request.GetTargetPath())
-	if err != nil {
-		return fmt.Errorf("%w at target path %s: %w", node.ErrFailedResize, p.Request.GetTargetPath(), err)
-	}
-
-	if !ok {
-		return fmt.Errorf("%w: %s", node.ErrFailedResize, p.Request.GetTargetPath())
 	}
 
 	return nil

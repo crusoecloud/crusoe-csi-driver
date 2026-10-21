@@ -3,6 +3,7 @@ package fs
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/crusoecloud/crusoe-csi-driver/internal/node"
 	"k8s.io/klog/v2"
@@ -46,9 +47,15 @@ func (p *PublishFilesystem) Publish() error {
 		filesystem = virtioFilesystem
 	}
 
-	// Mount the disk to the target path
-	err := p.Mounter.Mount(p.DevicePath, p.Request.GetTargetPath(), filesystem, mountOpts)
-	if err != nil {
+	// CRUSOE-99112 RED RUN, DO NOT MERGE: bind-mount a directory local to this node instead of
+	// the share, so each node sees only the files written on it.
+	_, _ = mountOpts, filesystem
+	fake := filepath.Join("/tmp/csi99112-fake", p.Request.GetVolumeId())
+	if err := os.MkdirAll(fake, node.NewDirPerms); err != nil {
+		return fmt.Errorf("failed to make fake volume directory: %w", err)
+	}
+
+	if err := p.Mounter.Mount(fake, p.Request.GetTargetPath(), "", []string{"bind"}); err != nil {
 		return fmt.Errorf("%w at target path %s: %s", node.ErrFailedMount, p.Request.GetTargetPath(), err.Error())
 	}
 

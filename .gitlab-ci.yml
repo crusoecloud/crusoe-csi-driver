@@ -90,7 +90,9 @@ functest:
     # than stripping the prefix, so npujari/CRUSOE-1 becomes npujari-crusoe-1 instead of CRUSOE-1.
     # Report every missing variable at once rather than one failed job per variable.
     - make functest-preflight CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
-    - make functest-ci CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
+    # THROWAWAY red-run branch: ssd only here, fs in functest-red-fs. A failed ssd case calls
+    # t.Fatalf, so in one run the fs case would never execute.
+    - make functest-ci CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}" FUNCTEST_CSI_FLAGS="-fail-on-skipped-csi-fs -csi-tests=ssd"
   after_script:
     - make functest-ci-cleanup
   # Only one functest can hold the staging cluster at a time.
@@ -116,6 +118,13 @@ functest:
       changes: !reference [.code-changes, changes]
       when: manual
       allow_failure: true
+
+# THROWAWAY red-run branch only (CRUSOE-99112): the fs half of the red run, on the same broken image.
+functest-red-fs:
+  extends: functest
+  script:
+    - make functest-preflight CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
+    - make functest-ci CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}" FUNCTEST_CSI_FLAGS="-fail-on-skipped-csi-fs -csi-tests=fs"
 
 # Gates crusoe-csi-driver version changes, upgrade and rollback, over mounted volumes. functest
 # above is a fresh-install gate: it installs one image on a clean cluster and never swaps the
