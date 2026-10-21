@@ -81,6 +81,9 @@ functest:
     FUNCTEST_CLUSTER_VERSION: "1.33.4-cmk.24"
     CSI_IMAGE_REGISTRY_USER: "gitlab-ci-token"
     CSI_IMAGE_REGISTRY_PASSWORD: "$CI_JOB_TOKEN"
+    # THROWAWAY dry-run branch only: run the CSI suite from the testing MR branch (CRUSOE-99112,
+    # testing !918) before it is tagged. Do NOT merge. On main, FUNCTEST_VERSION is a released tag.
+    FUNCTEST_VERSION: "npujari/CRUSOE-99112-csi-datapath-assertions"
   script:
     # Derive the tag exactly as build_and_push does, off the same RELEASE_IMAGE, so this cannot drift
     # from what was actually pushed. CI_COMMIT_REF_SLUG would not match: it rewrites the branch rather
@@ -174,6 +177,9 @@ functest-upgrade:
     reports:
       junit: functests-upgrade.xml
   rules:
+    # THROWAWAY dry-run branch only: the upgrade suite is unchanged by testing !918, so skip it
+    # rather than hold the shared staging cluster for another run.
+    - when: never
     # Same as functest: automatic and blocking on MRs to the default branch, on-demand for stacked
     # MRs. A staging flake blocks the MR until the job is retried, which functest already does too.
     - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
