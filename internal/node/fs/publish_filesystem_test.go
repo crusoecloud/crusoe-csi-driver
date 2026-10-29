@@ -109,7 +109,7 @@ func TestPublishFilesystem_Publish_NFSVolume(t *testing.T) {
 
 	// Check that NFS mount options are present
 	expectedOptions := []string{
-		"defaults", "ro", "vers=3", "nconnect=16", "spread_reads", "spread_writes", "remoteports=2049-2050",
+		"defaults", "ro", "vers=4.1", "nconnect=16", "spread_reads", "spread_writes", "remoteports=2049-2050",
 	}
 	if len(call.options) != len(expectedOptions) {
 		t.Errorf("expected %d mount options, got %d: %v", len(expectedOptions), len(call.options), call.options)
@@ -178,7 +178,7 @@ func TestPublishFilesystem_Publish_NFSVolumeWithDNS(t *testing.T) {
 	}
 
 	// Check that NFS mount options include remoteports=dns
-	expectedOptions := []string{"vers=3", "nconnect=16", "spread_reads", "spread_writes", "remoteports=dns"}
+	expectedOptions := []string{"vers=4.1", "nconnect=16", "spread_reads", "spread_writes", "remoteports=dns"}
 	if len(call.options) != len(expectedOptions) {
 		t.Errorf("expected %d mount options, got %d: %v", len(expectedOptions), len(call.options), call.options)
 	}
@@ -241,7 +241,7 @@ func TestPublishFilesystem_Publish_NFSVolumeNoRemotePorts(t *testing.T) {
 	call := mockMnt.mountCalls[0]
 
 	// Check that NFS mount options do NOT include remoteports when empty
-	expectedOptions := []string{"vers=3", "nconnect=16", "spread_reads", "spread_writes"}
+	expectedOptions := []string{"vers=4.1", "nconnect=16", "spread_reads", "spread_writes"}
 	if len(call.options) != len(expectedOptions) {
 		t.Errorf("expected %d mount options, got %d: %v", len(expectedOptions), len(call.options), call.options)
 	}
@@ -305,7 +305,7 @@ func TestPublishFilesystem_Publish_VirtioFSVolume(t *testing.T) {
 
 	// Check that mount options do not include NFS-specific options
 	for _, opt := range call.options {
-		if opt == "vers=3" || opt == "nconnect=16" {
+		if opt == "vers=4.1" || opt == "nconnect=16" {
 			t.Errorf("VirtioFS mount should not have NFS options, got: %v", call.options)
 		}
 	}

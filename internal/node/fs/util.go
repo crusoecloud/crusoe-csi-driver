@@ -18,7 +18,7 @@ const (
 
 func getNFSMountOpts(nfsRemotePorts string) []string {
 	opts := []string{
-		"vers=3",
+		"vers=4.1",
 		"nconnect=16",
 		"spread_reads",
 		"spread_writes",
