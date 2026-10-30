@@ -208,6 +208,16 @@ func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
 ) {
 	klog.Infof("Received request to publish volume: %+v", request)
 
+	// NFS shared-volumes are accessible over the network from any node in the project;
+	// they do not need to be "attached" to a VM at the Crusoe API level.
+	// This also enables static provisioning: a pre-existing shared-volume can be
+	// referenced by volumeHandle in a PV without going through CreateVolume.
+	if d.DiskType == common.DiskTypeFS {
+		klog.Infof("Skipping VM-level attachment for shared-volume %s", request.GetVolumeId())
+
+		return &csi.ControllerPublishVolumeResponse{}, nil
+	}
+
 	// Check if the disk is already attached to the instance
 	attached, err := crusoe.CheckDiskAttached(ctx,
 		d.CrusoeClient,
@@ -273,6 +283,13 @@ func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 	error,
 ) {
 	klog.Infof("Received request to unpublish volume: %+v", request)
+
+	// NFS shared-volumes do not use VM-level attachment; nothing to detach.
+	if d.DiskType == common.DiskTypeFS {
+		klog.Infof("Skipping VM-level detachment for shared-volume %s", request.GetVolumeId())
+
+		return &csi.ControllerUnpublishVolumeResponse{}, nil
+	}
 
 	// Check if the disk is already detached from the instance
 	attached, err := crusoe.CheckDiskAttached(ctx,
