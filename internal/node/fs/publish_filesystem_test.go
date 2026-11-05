@@ -178,7 +178,9 @@ func TestPublishFilesystem_Publish_NFSVolumeWithDNS(t *testing.T) {
 	}
 
 	// Check that NFS mount options include remoteports=dns
-	expectedOptions := []string{"vers=4.2", "nconnect=16", "pconnect=1", "spread_reads", "spread_writes", "remoteports=dns"}
+	expectedOptions := []string{
+		"vers=4.2", "nconnect=16", "pconnect=1", "spread_reads", "spread_writes", "remoteports=dns",
+	}
 	if len(call.options) != len(expectedOptions) {
 		t.Errorf("expected %d mount options, got %d: %v", len(expectedOptions), len(call.options), call.options)
 	}
