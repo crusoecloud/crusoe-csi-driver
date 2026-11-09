@@ -119,7 +119,7 @@ func (d *DefaultController) CreateVolume(ctx context.Context, request *csi.Creat
 			klog.Errorf("failed to get result of disk creation: %s",
 				common.UnpackSwaggerErr(getResultErr))
 
-			return nil, status.Errorf(codes.Internal,
+			return nil, status.Errorf(codeForOperationError(getResultErr),
 				"failed to get result of disk creation: %s",
 				common.UnpackSwaggerErr(getResultErr))
 		}
@@ -190,7 +190,7 @@ func (d *DefaultController) DeleteVolume(ctx context.Context,
 			request.GetVolumeId(),
 			common.UnpackSwaggerErr(awaitErr))
 
-		return nil, status.Errorf(codes.Internal,
+		return nil, status.Errorf(codeForOperationError(awaitErr),
 			"failed to get result of disk deletion for disk %s: %s",
 			request.GetVolumeId(),
 			common.UnpackSwaggerErr(awaitErr))
@@ -257,7 +257,7 @@ func (d *DefaultController) ControllerPublishVolume(ctx context.Context,
 	if err != nil {
 		klog.Errorf("failed to get result of disk attachment for disk %s: %s", request.GetVolumeId(), err)
 
-		return nil, status.Errorf(codes.Internal, "failed to get result of disk attachment for disk %s: %s",
+		return nil, status.Errorf(codeForOperationError(err), "failed to get result of disk attachment for disk %s: %s",
 			request.GetVolumeId(),
 			err)
 	}
@@ -330,7 +330,7 @@ func (d *DefaultController) ControllerUnpublishVolume(ctx context.Context,
 			request.GetVolumeId(),
 			err)
 
-		return nil, status.Errorf(codes.Internal, "failed to get result of disk detachment for disk %s: %s",
+		return nil, status.Errorf(codeForOperationError(err), "failed to get result of disk detachment for disk %s: %s",
 			request.GetVolumeId(),
 			err)
 	}
@@ -513,7 +513,7 @@ func (d *DefaultController) ControllerExpandVolume(ctx context.Context, request 
 			request.GetVolumeId(),
 			common.UnpackSwaggerErr(err))
 
-		return nil, status.Errorf(codes.Internal,
+		return nil, status.Errorf(codeForOperationError(err),
 			"failed to get result of disk resize: %s", common.UnpackSwaggerErr(err))
 	}
 

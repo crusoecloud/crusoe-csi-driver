@@ -59,29 +59,70 @@ func OpResultToError(res interface{}) (expectedErr, unexpectedErr error) {
 	return fmt.Errorf("%s", resultError.Message), nil
 }
 
+type getOperationFunc func(ctx context.Context, projectID string, operationID string) (
+	crusoeapi.Operation, *http.Response, error)
+
 // AwaitOperation polls an async API operation until it resolves into a success or failure state.
 func AwaitOperation(ctx context.Context, op *crusoeapi.Operation, projectID string,
 	getOp func(ctx context.Context, projectID string, operationID string) (crusoeapi.Operation, *http.Response, error),
 ) (
 	*crusoeapi.Operation, error,
 ) {
-	timeoutCtx, cancel := context.WithTimeout(ctx, OperationTimeout)
+	return awaitOperation(ctx, op, projectID, getOp, OperationTimeout)
+}
+
+func awaitOperation(ctx context.Context, op *crusoeapi.Operation, projectID string,
+	getOp getOperationFunc, timeout time.Duration,
+) (
+	*crusoeapi.Operation, error,
+) {
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	for op.State == string(OpInProgress) {
 		updatedOp, _, err := getOp(timeoutCtx, projectID, op.OperationId)
 		if err != nil {
-			return nil, fmt.Errorf("error getting operation with id %s: %w", op.OperationId, err)
+			err = fmt.Errorf("error getting operation with id %s: %w", op.OperationId, err)
+		} else {
+			op = &updatedOp
+			err = CancellableSleep(timeoutCtx, PollInterval)
 		}
 
-		op = &updatedOp
-
-		err = CancellableSleep(timeoutCtx, PollInterval)
 		if err != nil {
+			// Our own timeout ran out while the caller is still waiting: check the
+			// operation once more so the caller gets its real state, not a timeout.
+			if timeoutCtx.Err() != nil && ctx.Err() == nil {
+				return finalOperationCheck(ctx, op, projectID, getOp, timeout)
+			}
+
 			return nil, err
 		}
 	}
 
+	return operationResult(op)
+}
+
+func finalOperationCheck(ctx context.Context, op *crusoeapi.Operation, projectID string,
+	getOp getOperationFunc, timeout time.Duration,
+) (
+	*crusoeapi.Operation, error,
+) {
+	checkCtx, cancel := context.WithTimeout(ctx, FinalOperationCheckTimeout)
+	defer cancel()
+
+	finalOp, _, err := getOp(checkCtx, projectID, op.OperationId)
+	if err != nil {
+		return nil, fmt.Errorf("error getting operation with id %s after %s: %w", op.OperationId, timeout, err)
+	}
+
+	if finalOp.State == string(OpInProgress) {
+		return nil, fmt.Errorf("operation %s %w after %s", op.OperationId, ErrOperationInProgress, timeout)
+	}
+
+	return operationResult(&finalOp)
+}
+
+func operationResult(op *crusoeapi.Operation) (*crusoeapi.Operation, error) {
 	switch op.State {
 	case string(OpSucceeded):
 		return op, nil

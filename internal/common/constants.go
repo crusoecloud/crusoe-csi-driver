@@ -55,6 +55,10 @@ const (
 	// OperationTimeout is the maximum time the Crusoe CSI driver will wait for an asynchronous operation to complete.
 	OperationTimeout = 5 * time.Minute
 
+	// FinalOperationCheckTimeout bounds the one extra status check made when
+	// OperationTimeout runs out, so the caller gets the operation's real state.
+	FinalOperationCheckTimeout = 10 * time.Second
+
 	// MaxSSDVolumesPerNode refers to the maximum number of SSD disks that can be attached to a VM,
 	// including its boot disk: 15 data disks plus the boot disk.
 	// ref: https://docs.crusoecloud.com/storage/disks/overview#persistent-disks

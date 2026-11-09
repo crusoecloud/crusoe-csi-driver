@@ -45,6 +45,17 @@ var (
 	errUnsupportedAccessType = errors.New("access type not supported")
 )
 
+// codeForOperationError returns DeadlineExceeded for an operation that was still
+// running when the driver stopped waiting, which the CSI sidecars retry as
+// "may still be in progress". Every other operation error is Internal.
+func codeForOperationError(err error) codes.Code {
+	if errors.Is(err, common.ErrOperationInProgress) {
+		return codes.DeadlineExceeded
+	}
+
+	return codes.Internal
+}
+
 func supportsAccessMode(volumeCapability *csi.VolumeCapability, diskType common.DiskType) bool {
 	switch diskType {
 	case common.DiskTypeSSD:
