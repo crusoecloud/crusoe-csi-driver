@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -17,10 +18,22 @@ const testTimeout = 1500 * time.Millisecond
 
 var errStatusUnavailable = errors.New("status endpoint unavailable")
 
+// honorCtx makes getOp fail on a done context, as the real HTTP client does, so
+// a final check made on the expired polling context fails the test.
+func honorCtx(getOp getOperationFunc) getOperationFunc {
+	return func(ctx context.Context, projectID, id string) (crusoeapi.Operation, *http.Response, error) {
+		if err := ctx.Err(); err != nil {
+			return crusoeapi.Operation{}, nil, fmt.Errorf("get operation %s: %w", id, err)
+		}
+
+		return getOp(ctx, projectID, id)
+	}
+}
+
 // opAfterTimeout returns state while polling and finalState once the test
 // timeout has passed, which is when the final check runs.
 func opAfterTimeout(start time.Time, finalState string, result interface{}) getOperationFunc {
-	return func(_ context.Context, _, id string) (crusoeapi.Operation, *http.Response, error) {
+	return honorCtx(func(_ context.Context, _, id string) (crusoeapi.Operation, *http.Response, error) {
 		if time.Since(start) < testTimeout {
 			return crusoeapi.Operation{OperationId: id, State: string(OpInProgress)}, nil, nil
 		}
@@ -31,7 +44,7 @@ func opAfterTimeout(start time.Time, finalState string, result interface{}) getO
 		}
 
 		return op, nil, nil
-	}
+	})
 }
 
 func failResult(msg string) interface{} {
@@ -113,13 +126,13 @@ func TestAwaitOperationFinalCheckError(t *testing.T) {
 	t.Parallel()
 
 	start := time.Now()
-	getOp := func(_ context.Context, _, id string) (crusoeapi.Operation, *http.Response, error) {
+	getOp := honorCtx(func(_ context.Context, _, id string) (crusoeapi.Operation, *http.Response, error) {
 		if time.Since(start) < testTimeout {
 			return crusoeapi.Operation{OperationId: id, State: string(OpInProgress)}, nil, nil
 		}
 
 		return crusoeapi.Operation{}, nil, errStatusUnavailable
-	}
+	})
 
 	_, err := awaitOperation(context.Background(), inProgressOp(), "proj-1", getOp, testTimeout)
 	if !errors.Is(err, errStatusUnavailable) {
