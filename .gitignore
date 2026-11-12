@@ -13,3 +13,8 @@ node_modules/
 package*.json
 tests.xml
 coverage.xml
+.mise-data/
+bin/
+.cache/
+junit.xml
+coverage.html

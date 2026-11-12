@@ -15,8 +15,7 @@ jobs:
           go-version-file: 'go.mod'
           cache: false
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.62.0
-          install-mode: goinstall
+          version: v2.15.0
           args: "--timeout=5m"

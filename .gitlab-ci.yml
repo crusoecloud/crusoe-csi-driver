@@ -1,66 +1,60 @@
-include:
-  - project: 'crusoeenergy/tools'
-    file: '/templates/go.gitlab-ci.yml'
-  - component: $CI_SERVER_FQDN/crusoeenergy/tools/wiz-deps@master
-
-default:
-  tags:
-    - x86-crusoecloud_build_prod-docker-build
-
-variables:
-  CI_IMAGE: registry.gitlab.com/crusoeenergy/tools/go-ci-1.26
-  # GitLab's registry rejects the attestation manifests buildkit v0.32+ attaches by default: the
-  # index push fails with "blob unknown to registry" naming a child it cannot resolve. Upstream is
-  # gitlab-org/container-registry#2367, fixed by gitlab-org/gitlab!249926. Remove this once that
-  # lands. Found by Dylan Lynch and Kishore Rajesh in #devx, 2026-08-24.
-  BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
-
-test_and_lint:
+workflow:
   rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_BRANCH == "release"'
-      changes: !reference [.code-changes, changes]
-    - if: '$CI_MERGE_REQUEST_ID'
-      changes: !reference [.code-changes, changes]
-    # don't run CI for semver tags, do run it for custom tags
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      auto_cancel:
+        on_new_commit: interruptible
     - if: '$CI_COMMIT_TAG && $CI_COMMIT_TAG !~ /^(.+\/)?v[0-9]+\.[0-9]+\.[0-9]+$/'
 
-build_and_push:
-  needs: []
-  script:
-    - |-
-      if [ "${BUILD_IN_SUBPATH:-true}" == "true" ]; then
-        cd ${SUBPROJECT_REL_PATH}
-      fi
-    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
-    # Build an image based on the commit ref, this will be available
-    # internally for testing feature branches and testing pre-release versions
-    - docker buildx create --use --name crusoe-csi-driver-builder
-    - |
-      docker buildx build --no-cache --pull \
-      -f "${DOCKERFILE:-./Dockerfile}" \
-      --build-arg CI_SERVER_HOST="$CI_SERVER_HOST" \
-      --build-arg CI_JOB_TOKEN="$CI_JOB_TOKEN" \
-      --build-arg CRUSOE_CSI_DRIVER_VERSION="$CI_COMMIT_REF_NAME" \
-      --platform linux/amd64,linux/arm64 \
-      -t "$RELEASE_IMAGE:${CI_COMMIT_REF_NAME##*/}" \
-      --push .
+default:
+  interruptible: true
 
+include:
+  - component: $CI_SERVER_FQDN/crusoeenergy/tools/mise@master
+  - component: $CI_SERVER_FQDN/crusoeenergy/tools/go@master
+    inputs:
+      major_version: "0"
+      minor_version: "4"
+      tag_version: "false"
+
+variables:
+  PLATFORMS: "linux/amd64,linux/arm64"
+  CI_IMAGE: registry.gitlab.com/crusoeenergy/tools/go-ci-1.26
+
+# Paths whose change makes the functest jobs run.
+.code-changes:
+  changes:
+    - go.mod
+    - go.*
+    - '*.gitlab-ci.yml'
+    - Makefile
+    - '*.mk'
+    - mise.toml
+    - mise.lock
+    - Dockerfile*
+    - cmd/**/*
+    - internal/**/*
+    - scripts/**/*
+    - '**/*.go'
 
 # Exercises this build of the driver on a real CMK cluster, the same suite region-coordinator and
 # kubernetes-manager gate on. Without -csi-image the suite tests whichever driver the cluster version
 # ships, which for this repo would mean gating a change on the released driver; -csi-image puts the
-# image built by build_and_push on the CSI workloads first.
+# image published by publish_artifacts on the CSI workloads first.
 #
 # The pull secret uses CI_JOB_TOKEN, which is valid for the life of the job. The pods pull during the
 # job, so there is no need for a long-lived deploy token.
 functest:
   stage: test
   image: $CI_IMAGE:master
+  tags:
+    - x86-crusoecloud_build_prod-docker-build
+  interruptible: false
   needs:
-    # Optional because build_and_push is itself filtered by .code-changes and a Dockerfile check. A
-    # hard need on a job the pipeline excluded makes the whole pipeline invalid, so this mirrors the
-    # shared template.
-    - job: build_and_push
+    # Optional because publish_artifacts is itself filtered by changes. A hard need on a job the
+    # pipeline excluded makes the whole pipeline invalid.
+    - job: publish_artifacts
       optional: true
   # A run is 30 to 45 minutes and GitLab's default job timeout is 60, which would kill the job at
   # about the same moment the Go timeout fires: no JUnit, and after_script not guaranteed to run, so
@@ -82,12 +76,11 @@ functest:
     CSI_IMAGE_REGISTRY_USER: "gitlab-ci-token"
     CSI_IMAGE_REGISTRY_PASSWORD: "$CI_JOB_TOKEN"
   script:
-    # Derive the tag exactly as build_and_push does, off the same RELEASE_IMAGE, so this cannot drift
-    # from what was actually pushed. CI_COMMIT_REF_SLUG would not match: it rewrites the branch rather
-    # than stripping the prefix, so npujari/CRUSOE-1 becomes npujari-crusoe-1 instead of CRUSOE-1.
+    # The commit SHA tag is pushed for every published image, and alwaysBuild in artifacts.yml
+    # makes glci publish it on every run.
     # Report every missing variable at once rather than one failed job per variable.
-    - make functest-preflight CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
-    - make functest-ci CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
+    - make functest-preflight CSI_IMAGE="${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+    - make functest-ci CSI_IMAGE="${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
   after_script:
     - make functest-ci-cleanup
   # Only one functest can hold the staging cluster at a time.
@@ -107,7 +100,7 @@ functest:
     - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
       changes: !reference [.code-changes, changes]
     # An MR stacked onto another feature branch gets an on-demand run instead. Same changes filter as
-    # above: without it a docs-only MR offers a functest button while build_and_push is filtered out,
+    # above: without it a docs-only MR offers a functest button while publish_artifacts is filtered out,
     # and there would be no image to test.
     - if: '$CI_MERGE_REQUEST_ID'
       changes: !reference [.code-changes, changes]
@@ -127,8 +120,11 @@ functest:
 functest-upgrade:
   stage: test
   image: $CI_IMAGE:master
+  tags:
+    - x86-crusoecloud_build_prod-docker-build
+  interruptible: false
   needs:
-    - job: build_and_push
+    - job: publish_artifacts
       optional: true
   # Same budget and reasoning as functest: job timeout above the Go timeout so the suite always
   # reports and after_script always releases the claim.
@@ -144,7 +140,7 @@ functest-upgrade:
     CSI_IMAGE_REGISTRY_USER: "gitlab-ci-token"
     CSI_IMAGE_REGISTRY_PASSWORD: "$CI_JOB_TOKEN"
   script:
-    - make functest-preflight CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}"
+    - make functest-preflight CSI_IMAGE="${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
     # Baseline = the chart's published appVersion (the released driver), resolved at runtime rather
     # than pinned here. A pinned tag rots at the next chart release: it moved v0.4.12 -> v0.4.13
     # mid-development, and a stale pin would test a released -> candidate step that no longer matches
@@ -162,7 +158,7 @@ functest-upgrade:
       fi
       echo "upgrade baseline image: ${CSI_BASELINE_IMAGE}"
       make functest-upgrade-ci \
-        CSI_IMAGE="${RELEASE_IMAGE}:${CI_COMMIT_REF_NAME##*/}" \
+        CSI_IMAGE="${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}" \
         CSI_BASELINE_IMAGE="${CSI_BASELINE_IMAGE}"
   after_script:
     - make functest-ci-cleanup
@@ -185,15 +181,12 @@ functest-upgrade:
 
 # Remove the tag_semver and pages jobs from merges into main.
 # The tag_semver job will be run using a GitHub action instead
-# and new versions will be pushed then.
-tag_semver:
+
+# The GitHub release workflow tags and publishes this repo, and no godoc site is wanted.
+go_publish_docs:
   rules:
     - when: never
 
-code_intelligence:
-  rules:
-    - when: never
-
-pages:
+publish_pages:
   rules:
     - when: never

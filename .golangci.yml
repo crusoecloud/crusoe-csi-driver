@@ -1,40 +1,8 @@
-# see https://golangci-lint.run/usage/configuration/
-linters-settings:
-  errcheck:
-    # report about not checking of errors in type assertions: `a := b.(MyStruct)`;
-    # default is false: such cases aren't reported by default.
-    check-type-assertions: true
-
-    # report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`;
-    # default is false: such cases aren't reported by default.
-    check-blank: true
-  govet:
-    enable-all: true
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/crusoecloud)
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - commentedOutCode
-  whitespace:
-    multi-if: true # Enforces newlines (or comments) after every multi-line if statement
-  gomoddirectives:
-    replace-allow-list:
-      - github.com/crusoecloud/client-go
-  funlen:
-    lines: 80
-    statements: 80
-    ignore-comments: true
+version: "2"
+run:
+  tests: true
 linters:
-  disable-all: true
+  default: none
   enable:
     - asciicheck
     - copyloopvar
@@ -49,21 +17,18 @@ linters:
     - forbidigo
     - forcetypeassert
     - funlen
-    - gochecknoinits
     - gochecknoglobals
+    - gochecknoinits
     - gocognit
     - goconst
     - gocritic
     - gocyclo
     - godot
-    - gofumpt
     - goheader
-    - goimports
     - gomoddirectives
     - gomodguard
     - goprintffuncname
     - gosec
-    - gosimple
     - govet
     - ineffassign
     - lll
@@ -84,30 +49,79 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - staticcheck
-    - stylecheck
     - tagliatelle
     - testpackage
     - thelper
     - tparallel
-    - typecheck
     - unconvert
     - unparam
     - unused
     - wastedassign
     - whitespace
     - wrapcheck
-
-issues:
-  # Excluding configuration per-path, per-linter, per-text and per-source
-  exclude-rules:
-    # Exclude lll issues for long lines with go:generate
-    - linters:
-        - lll
-      source: "^//go:generate "
-
-run:
-  # include test files or not
-  tests: true
-
-# golangci.com configuration
-# https://github.com/golangci/golangci/wiki/Configuration
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    funlen:
+      lines: 80
+      statements: 80
+      ignore-comments: true
+    gocritic:
+      disabled-checks:
+        - commentedOutCode
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    gomoddirectives:
+      replace-allow-list:
+        - github.com/crusoecloud/client-go
+    govet:
+      enable-all: true
+    whitespace:
+      multi-if: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - lll
+        source: '^//go:generate '
+      - linters:
+          - goconst
+        path: _test\.go
+      - linters:
+          - err113
+        path: internal/common/util\.go
+        text: do not define dynamic errors
+      - linters:
+          - noctx
+        path: internal/util\.go
+        text: net\.Listen must not be called
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/crusoecloud)
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

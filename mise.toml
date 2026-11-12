@@ -1,2 +1,50 @@
 [tools]
 go = "1.26.10"
+golangci-lint = "2.15.0"
+gotestsum = "1.13.0"
+"go:github.com/boumenot/gocover-cobertura" = "1.4.0"
+
+[settings]
+experimental = true
+lockfile = true
+
+[env]
+CGO_ENABLED = "0"
+GIT_DEFAULT_BRANCH = "main"
+GOPRIVATE = "gitlab.com"
+
+[vars]
+build_flags = "-ldflags=-X github.com/crusoecloud/crusoe-csi-driver/internal/common.PluginVersion={{ env.CI_COMMIT_REF_NAME | default(value=exec(command='(git describe --always --tags --dirty 2>/dev/null || echo dev)')) }}"
+
+[task_config]
+includes = [
+  "git::https://git@gitlab.com/crusoeenergy/tools.git//tasks/go.toml?ref=master",
+]
+
+[tasks.precommit]
+description = "Tidy modules, then apply linter fixes and formatting."
+run = [
+  { task = "go:mod-tidy" },
+  { task = "go:lint" },
+]
+
+[tasks.dev]
+description = "Run race tests, then precommit and lint checks."
+run = [
+  { task = "go:test:race" },
+  { task = "precommit" },
+  { task = "go:lint:check" },
+]
+
+[tasks.ci]
+description = "Run the checks CI runs: tidy, coverage tests, race tests, lint."
+run = [
+  { task = "go:mod-tidy:check" },
+  { task = "go:test:cover" },
+  { task = "go:test:race" },
+  { task = "go:lint:check" },
+]
+
+[tasks.run]
+description = "Run the driver locally with the version stamped in."
+run = "go run -ldflags \"-X github.com/crusoecloud/crusoe-csi-driver/internal/common.PluginVersion=$(git describe --always --tags --dirty)\" ./cmd/crusoe-csi-driver"
