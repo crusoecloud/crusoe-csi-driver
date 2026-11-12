@@ -46,7 +46,7 @@ variables:
 # The pull secret uses CI_JOB_TOKEN, which is valid for the life of the job. The pods pull during the
 # job, so there is no need for a long-lived deploy token.
 functest:
-  stage: test
+  stage: deploy
   image: $CI_IMAGE:master
   tags:
     - x86-crusoecloud_build_prod-docker-build
@@ -118,7 +118,7 @@ functest:
 # Shares functest's staging claim (same resource_group), so the two run one at a time against the
 # single staging cluster rather than fighting over it or needing two clusters at once.
 functest-upgrade:
-  stage: test
+  stage: deploy
   image: $CI_IMAGE:master
   tags:
     - x86-crusoecloud_build_prod-docker-build
