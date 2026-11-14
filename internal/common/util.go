@@ -95,18 +95,13 @@ func awaitOperation(ctx context.Context, op *crusoeapi.Operation, projectID stri
 	// Normal poll rate. Back off only while status reads keep failing.
 	wait := PollInterval
 	for op.State == string(OpInProgress) {
-		updated, resp, err := getOp(timeoutCtx, projectID, op.OperationId)
-		switch {
-		case err != nil && isPermanentReadError(resp):
-			// The request itself was rejected (operation not found, no access), so
-			// asking again cannot succeed.
-			return nil, fmt.Errorf("error getting operation with id %s: %w", op.OperationId, err)
-		case err != nil:
+		updated, _, err := getOp(timeoutCtx, projectID, op.OperationId)
+		if err != nil {
 			// A failed status read says nothing about the operation, which may
 			// still be running. Log it and try again instead of failing the call.
 			klog.Errorf("failed to read operation %s: %v", op.OperationId, err)
 			wait = min(wait*pollBackoffFactor, maxPollBackoff)
-		default:
+		} else {
 			op = &updated
 			wait = PollInterval
 		}
@@ -131,22 +126,6 @@ func awaitOperation(ctx context.Context, op *crusoeapi.Operation, projectID stri
 
 	// The caller is still waiting, so the sleep was cut short by our own timeout.
 	return nil, fmt.Errorf("operation %s %w after %s", op.OperationId, ErrOperationInProgress, timeout)
-}
-
-// isPermanentReadError reports whether a failed status read was a 4xx that a retry
-// cannot fix. 408 and 429 are temporary, and no response at all (network error,
-// expired context) is treated as temporary too.
-func isPermanentReadError(resp *http.Response) bool {
-	if resp == nil {
-		return false
-	}
-
-	switch resp.StatusCode {
-	case http.StatusRequestTimeout, http.StatusTooManyRequests:
-		return false
-	default:
-		return resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError
-	}
 }
 
 func operationResult(op *crusoeapi.Operation) (*crusoeapi.Operation, error) {

@@ -30,11 +30,10 @@ func honorCtx(getOp getOperationFunc) getOperationFunc {
 	}
 }
 
-// readResult is one scripted getOp response.
+// readResult is one scripted getOp response. An empty state means the read fails.
 type readResult struct {
 	result interface{}
 	state  string
-	status int // HTTP status of a failed read; 0 means no response at all
 }
 
 // scriptedGetOp returns the reads in order, repeating the last one, and counts the calls.
@@ -46,12 +45,7 @@ func scriptedGetOp(reads ...readResult) (getOp getOperationFunc, calls *int) {
 		*calls++
 
 		if r.state == "" {
-			var resp *http.Response
-			if r.status != 0 {
-				resp = &http.Response{StatusCode: r.status}
-			}
-
-			return crusoeapi.Operation{}, resp, errStatusRead
+			return crusoeapi.Operation{}, nil, errStatusRead
 		}
 
 		op := crusoeapi.Operation{OperationId: id, State: r.state}
@@ -71,8 +65,8 @@ func readSucceeded() readResult {
 	return readResult{state: string(OpSucceeded)}
 }
 
-func failRead(status int) readResult {
-	return readResult{status: status}
+func readFailed() readResult {
+	return readResult{}
 }
 
 func inProgressOp() *crusoeapi.Operation {
@@ -144,93 +138,31 @@ func TestAwaitOperationCallerGone(t *testing.T) {
 	}
 }
 
-func TestAwaitOperationPermanentReadErrorFailsFast(t *testing.T) {
+func TestAwaitOperationReadErrorRetries(t *testing.T) {
 	t.Parallel()
 
-	for _, status := range []int{
-		http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound,
-	} {
-		t.Run(http.StatusText(status), func(t *testing.T) {
-			t.Parallel()
+	getOp, calls := scriptedGetOp(readFailed(), readSucceeded())
 
-			getOp, calls := scriptedGetOp(failRead(status))
-
-			_, err := awaitOperation(context.Background(), inProgressOp(), "proj-1", getOp, testTimeout)
-			if !errors.Is(err, errStatusRead) {
-				t.Fatalf("expected the read error, got %v", err)
-			}
-			if !strings.Contains(err.Error(), "error getting operation with id op-123") {
-				t.Fatalf("unexpected message: %v", err)
-			}
-			if *calls != 1 {
-				t.Fatalf("expected 1 status read, got %d", *calls)
-			}
-		})
+	op, err := awaitOperation(context.Background(), inProgressOp(), "proj-1", getOp, 5*time.Second)
+	if err != nil {
+		t.Fatalf("expected the retry to succeed, got %v", err)
 	}
-}
-
-func TestAwaitOperationTemporaryReadErrorRetries(t *testing.T) {
-	t.Parallel()
-
-	// 0 is a read that got no response at all, such as a network error.
-	for _, status := range []int{
-		0, http.StatusRequestTimeout, http.StatusTooManyRequests,
-		http.StatusInternalServerError, http.StatusServiceUnavailable,
-	} {
-		t.Run(fmt.Sprintf("status %d", status), func(t *testing.T) {
-			t.Parallel()
-
-			getOp, calls := scriptedGetOp(failRead(status), readSucceeded())
-
-			op, err := awaitOperation(context.Background(), inProgressOp(), "proj-1", getOp, 5*time.Second)
-			if err != nil {
-				t.Fatalf("expected the retry to succeed, got %v", err)
-			}
-			if op.State != string(OpSucceeded) {
-				t.Fatalf("expected state %q, got %q", OpSucceeded, op.State)
-			}
-			if *calls != 2 {
-				t.Fatalf("expected 2 status reads, got %d", *calls)
-			}
-		})
+	if op.State != string(OpSucceeded) {
+		t.Fatalf("expected state %q, got %q", OpSucceeded, op.State)
+	}
+	if *calls != 2 {
+		t.Fatalf("expected 2 status reads, got %d", *calls)
 	}
 }
 
 func TestAwaitOperationReadErrorsUntilTimeout(t *testing.T) {
 	t.Parallel()
 
-	// Reads that keep failing temporarily end as a timeout, not as the read error.
-	getOp, _ := scriptedGetOp(failRead(http.StatusServiceUnavailable))
+	// Reads that keep failing end as a timeout, not as the read error.
+	getOp, _ := scriptedGetOp(readFailed())
 
 	_, err := awaitOperation(context.Background(), inProgressOp(), "proj-1", getOp, testTimeout)
 	if !errors.Is(err, ErrOperationInProgress) {
 		t.Fatalf("expected ErrOperationInProgress, got %v", err)
-	}
-}
-
-func TestIsPermanentReadError(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		resp *http.Response
-		want bool
-	}{
-		"no response":           {resp: nil, want: false},
-		"400 bad request":       {resp: &http.Response{StatusCode: http.StatusBadRequest}, want: true},
-		"404 not found":         {resp: &http.Response{StatusCode: http.StatusNotFound}, want: true},
-		"408 request timeout":   {resp: &http.Response{StatusCode: http.StatusRequestTimeout}, want: false},
-		"429 too many requests": {resp: &http.Response{StatusCode: http.StatusTooManyRequests}, want: false},
-		"500 internal error":    {resp: &http.Response{StatusCode: http.StatusInternalServerError}, want: false},
-		"503 unavailable":       {resp: &http.Response{StatusCode: http.StatusServiceUnavailable}, want: false},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := isPermanentReadError(tt.resp); got != tt.want {
-				t.Fatalf("isPermanentReadError(%s) = %v, want %v", name, got, tt.want)
-			}
-		})
 	}
 }
