@@ -70,7 +70,7 @@ lint-ci: ## Verifies `golangci-lint` passes and outputs in CI-friendly format
 # Pin the testing repo tag: changes there can affect how these tests should be run here. Same
 # consumption pattern as region-coordinator, kubernetes-manager, and storms. Overridable so a run can
 # point at a testing branch before that work is tagged.
-FUNCTEST_VERSION ?= v0.0.490
+FUNCTEST_VERSION ?= v0.0.497
 
 # Different repos hold the Slack credentials under different names: region-coordinator uses these
 # names directly, kubernetes-manager maps them from FUNCTEST_STAGING_SLACK_TOKEN and
