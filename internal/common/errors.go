@@ -7,4 +7,5 @@ var (
 	ErrUnableToGetOpRes         = errors.New("failed to get result of operation")
 	ErrUnexpectedOperationState = errors.New("unexpected operation state")
 	ErrNoSizeRequested          = errors.New("no disk size requested")
+	ErrOperationInProgress      = errors.New("still in progress")
 )

@@ -12,6 +12,7 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	crusoeapi "github.com/crusoecloud/client-go/swagger/v1alpha5"
+	"k8s.io/klog/v2"
 )
 
 type OpStatus string
@@ -26,6 +27,13 @@ const (
 	OpSucceeded  OpStatus = "SUCCEEDED"
 	OpInProgress OpStatus = "IN_PROGRESS"
 	OpFailed     OpStatus = "FAILED"
+)
+
+// While status reads keep failing, the wait between them grows by pollBackoffFactor
+// up to maxPollBackoff.
+const (
+	pollBackoffFactor = 2
+	maxPollBackoff    = 15 * time.Second
 )
 
 const numExpectedComponents = 2
@@ -59,29 +67,83 @@ func OpResultToError(res interface{}) (expectedErr, unexpectedErr error) {
 	return fmt.Errorf("%s", resultError.Message), nil
 }
 
-// AwaitOperation polls an async API operation until it resolves into a success or failure state.
+type getOperationFunc func(ctx context.Context, projectID string, operationID string) (
+	crusoeapi.Operation, *http.Response, error)
+
+// AwaitOperation polls an async API operation until it reaches a terminal state
+// or OperationTimeout runs out.
 func AwaitOperation(ctx context.Context, op *crusoeapi.Operation, projectID string,
-	getOp func(ctx context.Context, projectID string, operationID string) (crusoeapi.Operation, *http.Response, error),
+	getOp getOperationFunc,
 ) (
 	*crusoeapi.Operation, error,
 ) {
-	timeoutCtx, cancel := context.WithTimeout(ctx, OperationTimeout)
+	return awaitOperation(ctx, op, projectID, getOp, OperationTimeout)
+}
+
+// awaitOperation is AwaitOperation with the timeout as a parameter, so tests can use a short one.
+// A timeout is reported as ErrOperationInProgress, which the controllers map to
+// codes.DeadlineExceeded so the sidecars retry.
+func awaitOperation(ctx context.Context, op *crusoeapi.Operation, projectID string,
+	getOp getOperationFunc, timeout time.Duration,
+) (
+	*crusoeapi.Operation, error,
+) {
+	// Child context, so the wait is bounded without touching the caller's context.
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// Normal poll rate. Back off only while status reads keep failing.
+	wait := PollInterval
+	// The last status read error, reported if the timeout runs out while reads fail.
+	var lastReadErr error
 	for op.State == string(OpInProgress) {
-		updatedOp, _, err := getOp(timeoutCtx, projectID, op.OperationId)
+		updated, _, err := getOp(timeoutCtx, projectID, op.OperationId)
 		if err != nil {
-			return nil, fmt.Errorf("error getting operation with id %s: %w", op.OperationId, err)
+			// A failed status read says nothing about the operation, which may
+			// still be running. Log it and try again instead of failing the call.
+			klog.Warningf("failed to read operation %s: %v", op.OperationId, err)
+			// A read cut short by our own timeout says nothing about the status API.
+			if timeoutCtx.Err() == nil {
+				lastReadErr = err
+			}
+			wait = min(wait*pollBackoffFactor, maxPollBackoff)
+		} else {
+			op = &updated
+			lastReadErr = nil
+			wait = PollInterval
 		}
 
-		op = &updatedOp
-
-		err = CancellableSleep(timeoutCtx, PollInterval)
-		if err != nil {
-			return nil, err
+		// The sleep is cut short when the budget runs out or the caller cancels.
+		// That is the loop's only other exit: a completed sleep means poll again.
+		if CancellableSleep(timeoutCtx, wait) != nil {
+			break
 		}
 	}
 
+	// The operation settled before the budget ran out, so report what it says.
+	if op.State != string(OpInProgress) {
+		return operationResult(op)
+	}
+
+	// Still in progress, but the caller is gone. Hand back its own cancellation
+	// rather than a timeout it did not cause.
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("operation %s: %w", op.OperationId, ctx.Err())
+	}
+
+	// The caller is still waiting, so the sleep was cut short by our own timeout.
+	// If reads were failing, say why, so the PVC event shows the cause. The read
+	// error is text only: wrapped, UnpackSwaggerErr would find its API error and
+	// replace this whole message with it.
+	if lastReadErr != nil {
+		return nil, fmt.Errorf("operation %s %w after %s (last status read failed: %s)",
+			op.OperationId, ErrOperationInProgress, timeout, lastReadErr.Error())
+	}
+
+	return nil, fmt.Errorf("operation %s %w after %s", op.OperationId, ErrOperationInProgress, timeout)
+}
+
+func operationResult(op *crusoeapi.Operation) (*crusoeapi.Operation, error) {
 	switch op.State {
 	case string(OpSucceeded):
 		return op, nil
@@ -99,7 +161,7 @@ func AwaitOperation(ctx context.Context, op *crusoeapi.Operation, projectID stri
 }
 
 func GetAsyncOperationResult[T any](ctx context.Context, op *crusoeapi.Operation, projectID string,
-	getOp func(ctx context.Context, projectID string, operationID string) (crusoeapi.Operation, *http.Response, error),
+	getOp getOperationFunc,
 ) (*T, *crusoeapi.Operation, error) {
 	completedOp, err := AwaitOperation(ctx, op, projectID, getOp)
 	if err != nil {
