@@ -57,6 +57,7 @@ const (
 	NFSRemotePortsFlag    = "nfs-remote-ports"
 	NFSHostFlag           = "nfs-host"
 	NFSTargetOverrideFlag = "nfs-target-override"
+	MaxFSVolumesFlag      = "max-fs-volumes-per-node"
 )
 
 const (

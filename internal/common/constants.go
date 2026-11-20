@@ -60,9 +60,12 @@ const (
 	// ref: https://docs.crusoecloud.com/storage/disks/overview#persistent-disks
 	MaxSSDVolumesPerNode = 16
 
-	// MaxFSVolumesPerNode refers to the maximum number of disks that can be attached to a VM
+	// MaxFSVolumesPerNode is the default number of shared disks the fs node plugin advertises per node.
+	// Shared disks are NFS mounts over the VM's network interface, so the limit is a platform policy
+	// rather than a device limit. Override it with --max-fs-volumes-per-node; it must not exceed the
+	// per-VM shared disk limit of the Crusoe API, or pods are scheduled to nodes where the attach fails.
 	// ref: https://docs.crusoecloud.com/storage/disks/overview/index.html#shared-disks
-	MaxFSVolumesPerNode = 4
+	MaxFSVolumesPerNode = 64
 
 	// MaxDiskNameLength refers to the maximum permissible length of a Crusoe disk name
 	// ref: https://docs.crusoecloud.com/storage/disks/overview#persistent-disks

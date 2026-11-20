@@ -62,12 +62,18 @@ func registerController(grpcServer *grpc.Server, hostInstance *crusoeapi.Instanc
 
 // nodeVolumeLimit returns the volume limit the node plugin reports in NodeGetInfo.
 // kubelet writes it to CSINode allocatable.count, which the scheduler enforces.
-func nodeVolumeLimit(diskType common.DiskType) int64 {
+// fsLimit is the --max-fs-volumes-per-node value and applies to the fs driver only.
+func nodeVolumeLimit(diskType common.DiskType, fsLimit int64) (int64, error) {
 	switch diskType {
 	case common.DiskTypeSSD:
-		return common.MaxSSDVolumesPerNode - 1 // Subtract 1 to allow for the OS/boot disk
+		return common.MaxSSDVolumesPerNode - 1, nil // Subtract 1 to allow for the OS/boot disk
 	case common.DiskTypeFS:
-		return common.MaxFSVolumesPerNode
+		// CSI treats 0 as "no limit", so refuse it rather than silently lifting the scheduler check.
+		if fsLimit < 1 {
+			return 0, fmt.Errorf("--%s must be at least 1, got %d", MaxFSVolumesFlag, fsLimit)
+		}
+
+		return fsLimit, nil
 	default:
 		// Switch is intended to be exhaustive, reaching this case is a bug
 		panic(fmt.Sprintf(
@@ -78,7 +84,10 @@ func nodeVolumeLimit(diskType common.DiskType) int64 {
 func registerNode(grpcServer *grpc.Server, hostInstance *crusoeapi.InstanceV1Alpha5) error {
 	// TODO: Add NodeExpandVolume capability once SSD online expansion is supported upstream
 	capabilities := common.BaseNodeCapabilities
-	maxVolumesPerNode := nodeVolumeLimit(common.PluginDiskType)
+	maxVolumesPerNode, err := nodeVolumeLimit(common.PluginDiskType, viper.GetInt64(MaxFSVolumesFlag))
+	if err != nil {
+		return err
+	}
 	var nodeServer csi.NodeServer
 
 	switch common.PluginDiskType {

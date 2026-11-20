@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crusoecloud/crusoe-csi-driver/internal"
+	"github.com/crusoecloud/crusoe-csi-driver/internal/common"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -61,6 +62,8 @@ func setFlags() {
 	rootCmd.Flags().String(internal.NFSHostFlag, internal.NFSHostDefault, "NFS Host")
 	rootCmd.Flags().String(internal.NFSTargetOverrideFlag, "",
 		"NFS target override for every fs mount on this node, ignoring the disk API: <IP> or <startIP>-<endIP>")
+	rootCmd.Flags().Int64(internal.MaxFSVolumesFlag, common.MaxFSVolumesPerNode,
+		"Shared disks the fs node plugin reports per node; must not exceed the API's per-VM shared disk limit")
 
 	err = viper.BindPFlags(rootCmd.Flags())
 	if err != nil {
