@@ -60,6 +60,8 @@ func registerController(grpcServer *grpc.Server, hostInstance *crusoeapi.Instanc
 	})
 }
 
+var errInvalidFSVolumeLimit = errors.New("fs volume limit must be at least 1")
+
 // nodeVolumeLimit returns the volume limit the node plugin reports in NodeGetInfo.
 // kubelet writes it to CSINode allocatable.count, which the scheduler enforces.
 // fsLimit is the --max-fs-volumes-per-node value and applies to the fs driver only.
@@ -70,7 +72,7 @@ func nodeVolumeLimit(diskType common.DiskType, fsLimit int64) (int64, error) {
 	case common.DiskTypeFS:
 		// CSI treats 0 as "no limit", so refuse it rather than silently lifting the scheduler check.
 		if fsLimit < 1 {
-			return 0, fmt.Errorf("--%s must be at least 1, got %d", MaxFSVolumesFlag, fsLimit)
+			return 0, fmt.Errorf("%w: --%s=%d", errInvalidFSVolumeLimit, MaxFSVolumesFlag, fsLimit)
 		}
 
 		return fsLimit, nil
